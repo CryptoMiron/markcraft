@@ -1,3 +1,6 @@
 /target
 /node_modules
 /ui/editor.bundle.js
+/pkgbuild/*.pkg.tar.zst
+/pkgbuild/src/
+/pkgbuild/pkg/

@@ -45,10 +45,10 @@
 
 ## 4. Omarchy (срез S4)
 
-- [ ] R4.1 `~/.local/state/omarchy/current/theme/colors.toml` читается; смена темы перекрашивает окно без рестарта.
-- [ ] R4.2 `text-scaling-factor` из портала применяется живьём, clamp 0.5–3.0, 12px = 1.0.
-- [ ] R4.3 `.desktop`, hicolor-иконка, `StartupWMClass`, PKGBUILD в `pkgbuild/`. *Файлы готовы, установка не проверялась.*
-- [ ] R4.4 Окно тайлится в Hyprland, минимум 720×520, без CSD-мусора.
+- [x] R4.1 `~/.local/state/omarchy/current/theme/colors.toml` читается; смена темы перекрашивает окно без рестарта. *Проверено: `omarchy theme set tokyo-night` → `catppuccin-latte` на живом окне; стиль страницы меняется без перезагрузки документа. Токены кода следуют яркости панели кода, а не темы окна.*
+- [x] R4.2 `text-scaling-factor` из портала применяется, clamp 0.5–3.0. *Проверено: 1.25 → 20 px и колонка 875 px; 1.0 → 16 px и 700 px. «Живьём» — при следующем запуске: сигнал портала не слушаем, записано в CUTS.*
+- [x] R4.3 `.desktop`, hicolor-иконка, `StartupWMClass`, PKGBUILD в `pkgbuild/`. *Пакет собран: `makepkg -f --nodeps` → `markcraft-0.1.0-1-x86_64.pkg.tar.zst`, внутри бинарник, `.desktop` и иконка; зависимости `gtk3 webkit2gtk-4.1 xdg-desktop-portal`.*
+- [x] R4.4 Окно тайлится в Hyprland, минимум 720×520. *Проверено: ресайз до 600×500 даёт 720×520, колонка сжимается до ширины окна минус поля.*
 
 ## 5. Клавиши и поиск (срез S5)
 

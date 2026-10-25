@@ -8,12 +8,15 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/miron/markcraft'
 license=('MIT')
 depends=('gtk3' 'webkit2gtk-4.1' 'xdg-desktop-portal')
-makedepends=('rust' 'cargo')
+makedepends=('rust' 'bun')
 source=()
 sha256sums=()
 
 build() {
   cd "$startdir/.."
+  # Интерфейс собирается в один HTML до cargo: без него нечего вкомпилировать.
+  bun install --frozen-lockfile
+  ./bin/bundle
   cargo build --release --locked
 }
 

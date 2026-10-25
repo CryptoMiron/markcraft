@@ -1,12 +1,28 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 /// Перевод строки, которым файл был записан. Документ в памяти всегда LF.
 #[derive(Clone, Copy, PartialEq)]
 enum Eol {
     Lf,
     Crlf,
+}
+
+/// Отпечаток файла на диске: время правки и размер. Хватает, чтобы заметить
+/// чужую запись, и не требует ни inotify, ни прав на каталог.
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct Stamp {
+    mtime: Option<SystemTime>,
+    len: u64,
+}
+
+/// Что стало с файлом с тех пор, как мы его читали или писали.
+pub enum Disk {
+    Same,
+    Modified,
+    Gone,
 }
 
 pub struct Doc {
@@ -17,6 +33,16 @@ pub struct Doc {
     saved: String,
     eol: Eol,
     bom: bool,
+    /// Отпечаток того, что мы сами читали или писали последним.
+    stamp: Option<Stamp>,
+}
+
+fn stamp_of(path: &Path) -> Option<Stamp> {
+    let meta = fs::metadata(path).ok()?;
+    Some(Stamp {
+        mtime: meta.modified().ok(),
+        len: meta.len(),
+    })
 }
 
 impl Doc {
@@ -27,6 +53,7 @@ impl Doc {
             saved: String::new(),
             eol: Eol::Lf,
             bom: false,
+            stamp: None,
         }
     }
 
@@ -53,6 +80,7 @@ impl Doc {
             text,
             eol,
             bom,
+            stamp: stamp_of(path),
         })
     }
 
@@ -121,7 +149,27 @@ impl Doc {
             return Err(e);
         }
         self.saved = self.text.clone();
+        self.stamp = stamp_of(path);
         Ok(())
+    }
+
+    pub fn disk_state(&self) -> Disk {
+        let Some(path) = self.path() else {
+            return Disk::Same;
+        };
+        match stamp_of(path) {
+            None => Disk::Gone,
+            Some(stamp) if Some(stamp) == self.stamp => Disk::Same,
+            Some(_) => Disk::Modified,
+        }
+    }
+
+    /// «Оставить моё»: чужая запись принята как текущее состояние диска,
+    /// чтобы не спрашивать об одном и том же файле повторно.
+    pub fn accept_disk(&mut self) {
+        if let Some(path) = self.path.clone() {
+            self.stamp = stamp_of(&path);
+        }
     }
 }
 
@@ -283,6 +331,35 @@ mod tests {
         let doc = Doc::open(&path).unwrap();
         assert!(doc.text.starts_with("# С BOM"));
         assert!(doc.bytes().starts_with(&[0xEF, 0xBB, 0xBF]));
+    }
+
+    #[test]
+    fn disk_state_sees_outside_writes() {
+        let dir = std::env::temp_dir().join(format!("markcraft-disk-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.md");
+        fs::write(&path, "# раз\n").unwrap();
+
+        let mut doc = Doc::open(&path).unwrap();
+        assert!(matches!(doc.disk_state(), Disk::Same));
+
+        // Размер и mtime сдвигаются: чужая запись видна.
+        fs::write(&path, "# раз\nдва\n").unwrap();
+        assert!(matches!(doc.disk_state(), Disk::Modified));
+
+        doc.accept_disk();
+        assert!(matches!(doc.disk_state(), Disk::Same));
+
+        // Своя запись тоже не считается чужой.
+        doc.text.push_str("три\n");
+        doc.save().unwrap();
+        assert!(matches!(doc.disk_state(), Disk::Same));
+
+        fs::remove_file(&path).unwrap();
+        assert!(matches!(doc.disk_state(), Disk::Gone));
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

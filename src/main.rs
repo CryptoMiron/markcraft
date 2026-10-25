@@ -13,11 +13,14 @@ use gtk::{
 use javascriptcore::ValueExt;
 use webkit2gtk::{LoadEvent, UserContentManager, UserContentManagerExt, WebView, WebViewExt};
 
-use doc::{Doc, draft, geometry};
+use doc::{Disk, Doc, draft, geometry};
 
 const UI_HTML: &str = include_str!("../ui/index.html");
 const AUTOSAVE: Duration = Duration::from_millis(1200);
 const DRAFT_EVERY: Duration = Duration::from_millis(300);
+/// Как часто проверяем, не изменил ли файл кто-то снаружи. Дешевле inotify
+/// и не требует прав на каталог.
+const WATCH_EVERY: Duration = Duration::from_millis(700);
 
 struct App {
     window: ApplicationWindow,
@@ -33,6 +36,10 @@ struct App {
     draft_pending: Cell<bool>,
     /// Открыт вопрос «сохранить?»: пока пользователь не решил, в файл не пишем.
     asking: Cell<bool>,
+    /// Файл изменился снаружи и пользователь ещё не решил, что делать.
+    conflict: Cell<bool>,
+    /// Про удаление файла уже спросили: второй раз за сессию не спрашиваем.
+    gone_reported: Cell<bool>,
     /// Что показать, когда страница догрузилась: черновик важнее файла из argv.
     restore: RefCell<Option<draft::Draft>>,
     initial: Option<PathBuf>,
@@ -115,7 +122,12 @@ impl App {
             // Условие в отдельную переменную: RefCell-borrow в `if` живёт до конца ветки
             // и паникует на borrow_mut внутри write.
             let has_path = later.doc.borrow().path().is_some();
-            if has_path && !later.recovered.get() && !later.asking.get() {
+            if has_path
+                && !later.recovered.get()
+                && !later.asking.get()
+                && !later.conflict.get()
+                && !later.gone_reported.get()
+            {
                 later.write(false);
             }
         });
@@ -152,6 +164,7 @@ impl App {
         }
         draft::clear();
         self.recovered.set(false);
+        self.gone_reported.set(false);
         self.dirty.set(false);
         self.refresh_title();
         true
@@ -170,6 +183,12 @@ impl App {
         match Doc::open(path) {
             Ok(doc) => {
                 *self.doc.borrow_mut() = doc;
+                self.gone_reported.set(false);
+                // Всё, что было в редакторе, заменено диском: несохранённого нет,
+                // и черновик от прежнего буфера больше не нужен.
+                self.dirty.set(false);
+                self.recovered.set(false);
+                draft::clear();
                 self.push();
             }
             Err(e) => error(&self.window, &format!("{}: {e}", path.display())),
@@ -182,6 +201,94 @@ impl App {
         }
         if let Some(path) = choose(&self.window, FileChooserAction::Open, "Открыть") {
             self.load(&path);
+        }
+    }
+
+    /// Раз в WATCH_EVERY смотрим на файл. Модальный диалог крутит вложенный цикл
+    /// событий, поэтому таймер продолжает тикать — флаги conflict/asking гасят его.
+    fn watch_disk(self: &Rc<Self>) {
+        let weak = Rc::downgrade(self);
+        gtk::glib::timeout_add_local(WATCH_EVERY, move || {
+            if let Some(app) = weak.upgrade() {
+                app.check_disk();
+            }
+            gtk::glib::ControlFlow::Continue
+        });
+    }
+
+    fn check_disk(self: &Rc<Self>) {
+        if self.asking.get() || self.conflict.get() || self.recovered.get() {
+            return;
+        }
+        if self.doc.borrow().path().is_none() {
+            return;
+        }
+        let state = self.doc.borrow().disk_state();
+        match state {
+            Disk::Same => self.gone_reported.set(false),
+            Disk::Modified => {
+                // Без своих правок терять нечего: молча берём версию с диска.
+                // Спрашивать вредно — «оставить моё» оставило бы в буфере
+                // устаревший текст, который следующий автосейв записал бы поверх чужого.
+                if self.dirty.get() {
+                    self.resolve_external(false);
+                } else {
+                    let path = self.doc.borrow().path().map(Path::to_path_buf);
+                    if let Some(path) = path {
+                        self.load(&path);
+                    }
+                }
+            }
+            Disk::Gone => {
+                if !self.gone_reported.get() {
+                    self.resolve_external(true);
+                }
+            }
+        }
+    }
+
+    /// true — файл исчез. Перечитать нельзя, поэтому «сохранить заново».
+    fn resolve_external(self: &Rc<Self>, gone: bool) {
+        self.conflict.set(true);
+        let reload = if gone {
+            ask_dialog(
+                &self.window,
+                "Файл удалён с диска.\n\nСохранить заново — записать документ по прежнему пути.",
+                "_Сохранить заново",
+                "_Оставить как есть",
+            )
+        } else {
+            ask_dialog(
+                &self.window,
+                "Файл изменён на диске.\n\nПеречитать — несохранённые правки будут потеряны.\nОставить моё — записать правки поверх чужой версии.",
+                "_Перечитать",
+                "_Оставить моё",
+            )
+        };
+        self.conflict.set(false);
+
+        if reload {
+            if gone {
+                // Перечитывать нечего: возвращаем файл из того, что в редакторе.
+                self.gone_reported.set(false);
+                self.write(true);
+            } else {
+                let path = self.doc.borrow().path().map(Path::to_path_buf);
+                if let Some(path) = path {
+                    self.load(&path);
+                }
+            }
+        } else {
+            // «Оставить моё»: чужая запись принята как состояние диска,
+            // иначе вопрос повторялся бы каждые 700 мс. Автосейв, который
+            // отработал впустую за время диалога, взводим заново — иначе
+            // «оставить моё» осталось бы только в памяти.
+            self.doc.borrow_mut().accept_disk();
+            // Удалённый файл не пересоздаём молча: автосейв ждёт явного Ctrl+S.
+            self.gone_reported.set(gone);
+            if self.dirty.get() && !gone {
+                self.schedule_save();
+            }
         }
     }
 
@@ -247,6 +354,23 @@ fn ask_save_changes(parent: &ApplicationWindow) -> ResponseType {
     response
 }
 
+/// Две кнопки, первая — действие по умолчанию. true — нажата первая.
+fn ask_dialog(parent: &ApplicationWindow, text: &str, accept: &str, reject: &str) -> bool {
+    let dialog = MessageDialog::new(
+        Some(parent),
+        DialogFlags::MODAL,
+        MessageType::Question,
+        ButtonsType::None,
+        text,
+    );
+    dialog.add_button(reject, ResponseType::No);
+    dialog.add_button(accept, ResponseType::Yes);
+    dialog.set_default_response(ResponseType::Yes);
+    let response = dialog.run();
+    dialog.close();
+    response == ResponseType::Yes
+}
+
 fn error(parent: &ApplicationWindow, text: &str) {
     let dialog = MessageDialog::new(
         Some(parent),
@@ -284,6 +408,8 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         pending: Cell::new(false),
         recovered: Cell::new(false),
         asking: Cell::new(false),
+        conflict: Cell::new(false),
+        gone_reported: Cell::new(false),
         draft_pending: Cell::new(false),
         restore: RefCell::new(draft::take()),
         initial,
@@ -329,6 +455,8 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         geometry::write(width, height);
         gtk::glib::Propagation::Proceed
     });
+
+    state.watch_disk();
 
     window.add(&webview);
     webview.load_html(UI_HTML, None);

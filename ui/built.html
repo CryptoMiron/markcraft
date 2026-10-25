@@ -18,17 +18,20 @@
   --mc-inline-bg: rgba(23, 23, 23, 0.07);
   --mc-inline-fg: #0f766e;
   --mc-accent: #0f766e;
-  /* Тема кода: спокойная, светлая. */
-  --mc-tok-comment: #8a8f98;
-  --mc-tok-string: #0a7d5a;
-  --mc-tok-number: #b45309;
-  --mc-tok-keyword: #a21caf;
-  --mc-tok-type: #1d4ed8;
-  --mc-tok-func: #0e7490;
-  --mc-tok-prop: #7c3aed;
-  --mc-tok-op: #52525b;
-  --mc-tok-punct: #71717a;
-  --mc-tok-meta: #b45309;
+}
+
+/* Блок кода тёмный в обеих темах (как в Inkdown), поэтому и токены одни. */
+:root {
+  --mc-tok-comment: #7d8590;
+  --mc-tok-string: #86efac;
+  --mc-tok-number: #fdba74;
+  --mc-tok-keyword: #d8b4fe;
+  --mc-tok-type: #93c5fd;
+  --mc-tok-func: #7dd3fc;
+  --mc-tok-prop: #c4b5fd;
+  --mc-tok-op: #a1a1aa;
+  --mc-tok-punct: #a1a1aa;
+  --mc-tok-meta: #fcd34d;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,17 +45,6 @@
     --mc-inline-bg: rgba(255, 255, 255, 0.05);
     --mc-inline-fg: #fb923c;
     --mc-accent: #7dd3fc;
-    /* Тема кода: та же гамма, но светлее — на тёмном фоне. */
-    --mc-tok-comment: #6b7280;
-    --mc-tok-string: #86efac;
-    --mc-tok-number: #fdba74;
-    --mc-tok-keyword: #d8b4fe;
-    --mc-tok-type: #93c5fd;
-    --mc-tok-func: #7dd3fc;
-    --mc-tok-prop: #c4b5fd;
-    --mc-tok-op: #a1a1aa;
-    --mc-tok-punct: #a1a1aa;
-    --mc-tok-meta: #fcd34d;
   }
 }
 

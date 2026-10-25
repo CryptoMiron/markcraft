@@ -84,6 +84,8 @@ const codeHighlight = syntaxHighlighting(
   ]),
 )
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
+import MarkdownIt from 'markdown-it'
 import { linkHrefAt } from './links.js'
 import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.js'
 
@@ -538,6 +540,41 @@ const livePreview = StateField.define({
   provide: (field) => EditorView.decorations.from(field),
 })
 
+// ─── Поиск и служебные команды ───────────────────────────────────────────────
+
+// Для Ctrl+Shift+C: тот же markdown, что видит пользователь, но в HTML.
+const md = new MarkdownIt({ html: false, linkify: true })
+
+const copyAsHtml = (view) => {
+  const text = view.state.doc.toString()
+  send('copyHtml', { html: md.render(text), text })
+  return true
+}
+
+// Панель поиска по-русски: свои строки вместо английских по умолчанию.
+const phrases = EditorState.phrases.of({
+  Find: 'Найти',
+  Replace: 'Заменить',
+  next: 'дальше',
+  previous: 'назад',
+  all: 'все',
+  'match case': 'с учётом регистра',
+  regexp: 'рег. выражение',
+  'by word': 'слово целиком',
+  replace: 'заменить',
+  'replace all': 'заменить все',
+  close: 'закрыть',
+})
+
+const serviceKeys = [
+  // Ctrl+H открывает ту же панель: замена живёт в ней.
+  { key: 'Mod-h', run: openSearchPanel, scope: 'editor search-panel' },
+  { key: 'Mod-Shift-c', run: copyAsHtml },
+  { key: 'Mod-n', run: () => (send('newWindow'), true) },
+  { key: 'Mod-/', run: () => (send('help'), true) },
+  { key: 'F1', run: () => (send('help'), true) },
+]
+
 // ─── Правка ─────────────────────────────────────────────────────────────────
 // Правила лежат в editing.js и проверяются тестами; здесь только их
 // применение к документу.
@@ -633,13 +670,29 @@ const view = new EditorView({
       composingField,
       livePreview,
       placeholder('Начните писать…'),
-      keymap.of([...editingKeys, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+      phrases,
+      search({ top: true }),
+      keymap.of([
+        ...serviceKeys,
+        ...searchKeymap,
+        ...editingKeys,
+        ...defaultKeymap,
+        ...historyKeymap,
+        indentWithTab,
+      ]),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return
         if (window.mc.quiet) return
         send('dirty', { text: update.state.doc.toString() })
       }),
       EditorView.domEventHandlers({
+        // Ctrl+колесо меняет размер текста, как в браузере.
+        wheel(event) {
+          if (!event.ctrlKey) return false
+          event.preventDefault()
+          send('zoom', { step: event.deltaY < 0 ? 1 : -1 })
+          return true
+        },
         compositionstart(event, view) {
           view.dispatch({ effects: setComposing.of(true) })
           return false
@@ -669,6 +722,21 @@ const view = new EditorView({
           if (key === 'o') {
             event.preventDefault()
             send('open')
+            return true
+          }
+          if (key === '=' || key === '+') {
+            event.preventDefault()
+            send('zoom', { step: 1 })
+            return true
+          }
+          if (key === '-') {
+            event.preventDefault()
+            send('zoom', { step: -1 })
+            return true
+          }
+          if (key === '0') {
+            event.preventDefault()
+            send('zoom', { step: 0 })
             return true
           }
           if (key === 'v') {

@@ -291,3 +291,58 @@ body {
   background: var(--mc-selection);
   color: var(--mc-selection-fg);
 }
+
+/* ─── Панель поиска ─────────────────────────────────────────────────────── */
+.cm-editor .cm-panels {
+  background: var(--mc-bg);
+  color: var(--mc-fg);
+  border-bottom: 1px solid var(--mc-border);
+}
+
+.cm-editor .cm-panels input,
+.cm-editor .cm-panels button,
+.cm-editor .cm-panels label {
+  font-family: system-ui, -apple-system, 'Adwaita Sans', sans-serif;
+  font-size: 13px;
+  color: var(--mc-fg);
+}
+
+.cm-editor .cm-panels input[type='text'] {
+  background: var(--mc-inline-bg);
+  border: 1px solid var(--mc-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+.cm-editor .cm-panels input[type='text']:focus {
+  border-color: var(--mc-accent);
+}
+
+.cm-editor .cm-panels button {
+  background: var(--mc-inline-bg);
+  border: 1px solid var(--mc-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.cm-editor .cm-panels button:hover {
+  border-color: var(--mc-accent);
+}
+
+.cm-editor .cm-panels button[name='close'] {
+  background: none;
+  border: none;
+  color: var(--mc-muted);
+}
+
+.cm-editor .cm-searchMatch {
+  background: var(--mc-selection);
+  outline: 1px solid var(--mc-border);
+}
+
+.cm-editor .cm-searchMatch-selected {
+  background: var(--mc-accent);
+  color: var(--mc-bg);
+}

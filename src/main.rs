@@ -252,6 +252,26 @@ impl App {
         self.webview.load_html(UI_HTML, base.as_deref());
     }
 
+    /// Ctrl+= / Ctrl+- / Ctrl+0: 10% за шаг, 0 — сброс к масштабу рабочего стола.
+    fn zoom(&self, step: i32) {
+        let mut theme = self.theme.borrow_mut();
+        let next = match step {
+            0 => 1.0,
+            s if s > 0 => theme.zoom + 0.1,
+            _ => theme.zoom - 0.1,
+        };
+        theme.set_zoom(next);
+        drop(theme);
+        self.apply_theme();
+    }
+
+    /// Ctrl+N: новое окно. Отдельный процесс — проще, чем второе окно в том же.
+    fn new_window(&self) {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = std::process::Command::new(exe).spawn();
+        }
+    }
+
     fn open_dialog(&self) {
         if !self.maybe_save() {
             return;
@@ -428,6 +448,72 @@ fn ask_dialog(parent: &ApplicationWindow, text: &str, accept: &str, reject: &str
     response == ResponseType::Yes
 }
 
+/// Ctrl+? / F1: список клавиш. Один диалог вместо отдельного окна.
+fn help(parent: &ApplicationWindow) {
+    // Текст простой, без разметки: set_secondary_markup в этом наборе
+    // фич gtk-rs недоступен, а ради заголовков заводить свой Dialog — лишний код.
+    const KEYS: &str = "\
+Файлы
+Ctrl+O — открыть
+Ctrl+S — сохранить
+Ctrl+Shift+S — сохранить как
+Ctrl+N — новое окно
+
+Правка
+Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — отменить и вернуть
+Ctrl+B — жирный
+Ctrl+I — курсив
+Ctrl+Shift+X — зачёркнутый
+Ctrl+K — ссылка
+
+Поиск
+Ctrl+F — поиск
+Ctrl+H — поиск и замена
+Enter / Ctrl+G — дальше, Shift+Enter — назад, Esc — закрыть
+
+Вид
+Ctrl+= / Ctrl+- / Ctrl+0 — размер текста
+Ctrl+колесо — то же
+Ctrl+Shift+C — копировать как HTML
+
+Полный экран — хоткей Omarchy, не приложения.";
+    let dialog = MessageDialog::new(
+        Some(parent),
+        DialogFlags::MODAL,
+        MessageType::Info,
+        ButtonsType::None,
+        KEYS,
+    );
+    dialog.set_title("Клавиши MarkCraft");
+    dialog.add_button("_Закрыть", ResponseType::Close);
+    dialog.set_default_response(ResponseType::Close);
+    dialog.run();
+    dialog.close();
+}
+
+/// Копирует документ как HTML с текстовым запасным вариантом: вставка
+/// в почту или редактор сохранит оформление, в терминал — текст.
+fn copy_html(html: &str, text: &str) {
+    use gtk::{TargetEntry, TargetFlags};
+    let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
+    let targets = [
+        TargetEntry::new("text/html", TargetFlags::empty(), 0),
+        TargetEntry::new("text/plain;charset=utf-8", TargetFlags::empty(), 1),
+        TargetEntry::new("UTF8_STRING", TargetFlags::empty(), 1),
+        TargetEntry::new("STRING", TargetFlags::empty(), 1),
+        TargetEntry::new("TEXT", TargetFlags::empty(), 1),
+    ];
+    let html = html.to_owned();
+    let text = text.to_owned();
+    clipboard.set_with_data(&targets, move |_, selection, info| {
+        if info == 0 {
+            selection.set(&selection.target(), 8, html.as_bytes());
+        } else {
+            selection.set_text(&text);
+        }
+    });
+}
+
 fn error(parent: &ApplicationWindow, text: &str) {
     let dialog = MessageDialog::new(
         Some(parent),
@@ -508,6 +594,17 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
                         |_| {},
                     );
                 }
+            }
+            "zoom" => {
+                let step = message["step"].as_i64().unwrap_or(0) as i32;
+                sender.zoom(step);
+            }
+            "newWindow" => sender.new_window(),
+            "help" => help(&sender.window),
+            "copyHtml" => {
+                let html = message["html"].as_str().unwrap_or_default();
+                let text = message["text"].as_str().unwrap_or_default();
+                copy_html(html, text);
             }
             "openUrl" => {
                 let url = message["url"].as_str().unwrap_or_default();

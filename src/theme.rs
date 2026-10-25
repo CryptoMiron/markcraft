@@ -17,6 +17,8 @@ pub struct Theme {
     pub code_background: String,
     /// Что просит рабочий стол (GNOME `text-scaling-factor`), 12 px = 1.0.
     pub text_scale: f64,
+    /// Что попросил пользователь через Ctrl+= / Ctrl+-, поверх рабочего стола.
+    pub zoom: f64,
 }
 
 impl Default for Theme {
@@ -33,6 +35,7 @@ impl Default for Theme {
             muted: "#909191".into(),
             code_background: "#1c1c1c".into(),
             text_scale: 1.0,
+            zoom: 1.0,
         }
     }
 }
@@ -114,7 +117,14 @@ impl Theme {
             theme.apply_colors(&text);
         }
         theme.text_scale = read_text_scale();
+        theme.zoom = read_zoom();
         theme
+    }
+
+    /// Масштаб пользователя, запоминается между запусками.
+    pub fn set_zoom(&mut self, zoom: f64) {
+        self.zoom = zoom.clamp(0.5, 3.0);
+        let _ = write_zoom(self.zoom);
     }
 
     fn apply_colors(&mut self, text: &str) {
@@ -222,9 +232,9 @@ impl Theme {
         )
     }
 
-    /// Размер текста с учётом масштаба рабочего стола.
+    /// Размер текста: база × рабочий стол × масштаб пользователя.
     pub fn scaled(&self, px: f64) -> f64 {
-        (px * self.text_scale).round()
+        (px * self.text_scale * self.zoom).round()
     }
 
     /// Колонка должна расти вместе с текстом: 700 px при 16 px — это
@@ -232,6 +242,31 @@ impl Theme {
     pub fn column(&self) -> f64 {
         self.scaled(700.0)
     }
+}
+
+fn zoom_file() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
+    Some(base.join("markcraft").join("zoom"))
+}
+
+fn read_zoom() -> f64 {
+    zoom_file()
+        .and_then(|f| fs::read_to_string(f).ok())
+        .and_then(|s| s.trim().parse::<f64>().ok())
+        .map(|z| z.clamp(0.5, 3.0))
+        .unwrap_or(1.0)
+}
+
+fn write_zoom(zoom: f64) -> std::io::Result<()> {
+    let Some(file) = zoom_file() else {
+        return Ok(());
+    };
+    if let Some(dir) = file.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(file, format!("{zoom}"))
 }
 
 /// `org.gnome.desktop.interface text-scaling-factor` через портал настроек.
@@ -434,6 +469,17 @@ bright_foreground = "#c0caf5"
             !css.trim_end_matches('}').contains("}"),
             "внутри :root лишняя скобка"
         );
+    }
+
+    #[test]
+    fn zoom_multiplies_desktop_scale() {
+        let theme = Theme {
+            text_scale: 1.25,
+            zoom: 2.0,
+            ..Default::default()
+        };
+        assert_eq!(theme.scaled(16.0), 40.0);
+        assert_eq!(theme.column(), 1750.0);
     }
 
     #[test]

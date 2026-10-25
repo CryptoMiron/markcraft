@@ -1,4 +1,10 @@
-import { EditorState, Compartment, StateField } from '@codemirror/state'
+import {
+  EditorState,
+  Compartment,
+  StateField,
+  StateEffect,
+  Transaction,
+} from '@codemirror/state'
 import {
   EditorView,
   Decoration,
@@ -85,6 +91,7 @@ const codeHighlight = syntaxHighlighting(
 )
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { linkHrefAt } from './links.js'
+import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.js'
 
 // ─── Мост в Rust ────────────────────────────────────────────────────────────
 const send = (type, extra = {}) =>
@@ -259,6 +266,7 @@ function blockRange(state, node) {
 
 function buildDecorations({ state }) {
   const doc = state.doc
+  const composing = state.field(composingField, false)
   const ranges = []
 
   const add = (from, to, deco) => {
@@ -269,6 +277,11 @@ function buildDecorations({ state }) {
   /// поверх своих же звёздочек).
   const addReplace = (from, to, deco) => {
     if (to > from) ranges.push({ from, to, deco, replace: true })
+  }
+
+  /// Блочная замена: во время IME её не ставим вовсе.
+  const addBlock = (from, to, deco) => {
+    if (!composing) addReplace(from, to, deco)
   }
 
   const tree = syntaxTree(state)
@@ -452,7 +465,7 @@ function buildDecorations({ state }) {
           case 'Table': {
             const range = blockRange(state, node)
             if (inRange(state, range.from, range.to)) return
-            addReplace(
+            addBlock(
               range.from,
               range.to,
               Decoration.replace({
@@ -465,7 +478,7 @@ function buildDecorations({ state }) {
           case 'HorizontalRule': {
             const range = blockRange(state, node)
             if (inRange(state, range.from, range.to)) return
-            addReplace(
+            addBlock(
               range.from,
               range.to,
               Decoration.replace({ widget: new RuleWidget(), block: true }),
@@ -502,17 +515,114 @@ function buildDecorations({ state }) {
   return Decoration.set(builder, true)
 }
 
+// Пока идёт набор через IME, блочные виджеты не пересобираются: замена DOM
+// под курсором рвёт composition и съедает первый слог.
+const setComposing = StateEffect.define()
+
+const composingField = StateField.define({
+  create: () => false,
+  update: (value, tr) => {
+    for (const effect of tr.effects) if (effect.is(setComposing)) value = effect.value
+    return value
+  },
+})
+
 // Блочные виджеты (таблицы, hr) разрешены только из StateField, не из ViewPlugin.
 const livePreview = StateField.define({
   create: (state) => buildDecorations({ state }),
   update: (deco, tr) => {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
+    if (
+      tr.docChanged ||
+      tr.selection ||
+      tr.effects.length ||
+      syntaxTree(tr.state) !== syntaxTree(tr.startState)
+    ) {
       return buildDecorations({ state: tr.state })
     }
     return deco
   },
   provide: (field) => EditorView.decorations.from(field),
 })
+
+// ─── Правка ─────────────────────────────────────────────────────────────────
+// Правила лежат в editing.js и проверяются тестами; здесь только их
+// применение к документу.
+
+/// Enter в списке продолжает список, в пустом пункте — выходит из него.
+const continueList = (view) => {
+  const { state } = view
+  const range = state.selection.main
+  if (!range.empty) return false
+  const line = state.doc.lineAt(range.head)
+  const rule = nextLinePrefix(line.text)
+  if (!rule) return false
+
+  if (rule.clear) {
+    // Пустой пункт: убираем маркер и оставляем пустую строку.
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: '' },
+      selection: { anchor: line.from },
+      userEvent: 'delete',
+    })
+    return true
+  }
+
+  view.dispatch({
+    changes: { from: range.head, insert: '\n' + rule.prefix },
+    selection: { anchor: range.head + 1 + rule.prefix.length },
+    scrollIntoView: true,
+    userEvent: 'input',
+  })
+  return true
+}
+
+/// Ctrl+B / Ctrl+I / Ctrl+Shift+X / Ctrl+K.
+const wrap = (marker) => (view) => {
+  const { state } = view
+  const range = state.selection.main
+  const text = state.doc.toString()
+  const edit = toggleWrap(text, range.from, range.to, marker)
+  view.dispatch({
+    changes: { from: edit.from, to: edit.to, insert: edit.insert },
+    selection: { anchor: edit.anchor, head: edit.head },
+    scrollIntoView: true,
+    userEvent: 'input',
+  })
+  return true
+}
+
+const makeLink = (view) => {
+  const { state } = view
+  const range = state.selection.main
+  const text = state.doc.toString()
+
+  // Уже внутри ссылки: выделяем адрес, чтобы набрать новый поверх.
+  const existing = existingLink(text, range.from)
+  if (existing) {
+    view.dispatch({
+      selection: { anchor: existing.urlFrom, head: existing.urlTo },
+      scrollIntoView: true,
+    })
+    return true
+  }
+
+  const edit = insertLink(text, range.from, range.to)
+  view.dispatch({
+    changes: { from: edit.from, to: edit.to, insert: edit.insert },
+    selection: { anchor: edit.anchor, head: edit.head },
+    scrollIntoView: true,
+    userEvent: 'input',
+  })
+  return true
+}
+
+const editingKeys = [
+  { key: 'Enter', run: continueList },
+  { key: 'Mod-b', run: wrap('**') },
+  { key: 'Mod-i', run: wrap('*') },
+  { key: 'Mod-Shift-x', run: wrap('~~') },
+  { key: 'Mod-k', run: makeLink },
+]
 
 // ─── Редактор ───────────────────────────────────────────────────────────────
 
@@ -528,15 +638,24 @@ const view = new EditorView({
       EditorView.lineWrapping,
       markdown({ base: markdownLanguage, codeLanguages }),
       codeHighlight,
+      composingField,
       livePreview,
       placeholder('Начните писать…'),
-      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+      keymap.of([...editingKeys, ...defaultKeymap, ...historyKeymap, indentWithTab]),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return
         if (window.mc.quiet) return
         send('dirty', { text: update.state.doc.toString() })
       }),
       EditorView.domEventHandlers({
+        compositionstart(event, view) {
+          view.dispatch({ effects: setComposing.of(true) })
+          return false
+        },
+        compositionend(event, view) {
+          view.dispatch({ effects: setComposing.of(false) })
+          return false
+        },
         mousedown(event, view) {
           const link = event.target.closest?.('.mc-link')
           if (!link || event.ctrlKey || event.metaKey || event.button !== 0) return false
@@ -560,6 +679,13 @@ const view = new EditorView({
             send('open')
             return true
           }
+          if (key === 'v') {
+            // Буфер читает Rust через GTK: WebKit под Wayland синтетический
+            // Ctrl+V не обрабатывает, а системный буфер нужен рабочим.
+            event.preventDefault()
+            send('paste')
+            return true
+          }
           return false
         },
       }),
@@ -577,9 +703,15 @@ window.mc = {
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: 0 },
       scrollIntoView: true,
+      // Загрузка файла — не правка: иначе первый Ctrl+Z стирает документ,
+      // а автосейв записывает пустоту.
+      annotations: Transaction.addToHistory.of(false),
     })
     this.quiet = false
     view.focus()
+  },
+  insert({ text }) {
+    view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: 'input' })
   },
   theme(css) {
     view.dispatch({ effects: themeCompartment.reconfigure(EditorView.theme(css)) })

@@ -456,6 +456,21 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
                 sender.save_as();
             }
             "open" => sender.open_dialog(),
+            "paste" => {
+                // Вставку берём из GTK-буфера: WebKit под Wayland вставку
+                // по синтетическому Ctrl+V не делает, а буфер читается всегда.
+                let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
+                if let Some(text) = clipboard.wait_for_text() {
+                    let payload = serde_json::json!({ "text": text.as_str() });
+                    sender.webview.evaluate_javascript(
+                        &format!("window.mc.insert({payload})"),
+                        None,
+                        None,
+                        None::<&gtk::gio::Cancellable>,
+                        |_| {},
+                    );
+                }
+            }
             "openUrl" => {
                 let url = message["url"].as_str().unwrap_or_default();
                 if !url.is_empty() {

@@ -1,0 +1,26 @@
+# Maintainer: Miron <miron@example.com>
+
+pkgname=markcraft
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Markdown editor for Omarchy: byte-exact files, Inkdown typography'
+arch=('x86_64' 'aarch64')
+url='https://github.com/miron/markcraft'
+license=('MIT')
+depends=('gtk3' 'webkit2gtk-4.1' 'xdg-desktop-portal')
+makedepends=('rust' 'cargo')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  cargo build --release --locked
+}
+
+package() {
+  cd "$startdir/.."
+  /usr/bin/install -Dm755 target/release/markcraft "$pkgdir/usr/bin/markcraft"
+  /usr/bin/install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  /usr/bin/install -Dm644 "$startdir/markcraft.desktop" "$pkgdir/usr/share/applications/markcraft.desktop"
+  /usr/bin/install -Dm644 "$startdir/markcraft.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/markcraft.svg"
+}

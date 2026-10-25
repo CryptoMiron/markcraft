@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>MarkCraft</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: rgba(45, 45, 40, 1);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1a1b1b;
+          --fg: rgba(255, 255, 255, 0.93);
+        }
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      body {
+        display: flex;
+        justify-content: center;
+      }
+      #doc {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 796px;
+        height: 100%;
+        margin: 0;
+        padding: 5vh 48px 360px;
+        border: 0;
+        outline: none;
+        resize: none;
+        background: transparent;
+        color: inherit;
+        font: 16px/1.53 system-ui, -apple-system, sans-serif;
+        tab-size: 4;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="doc" spellcheck="false" autocomplete="off"></textarea>
+    <script>
+      const ta = document.getElementById('doc')
+
+      const send = (type, extra = {}) =>
+        window.webkit.messageHandlers.ipc.postMessage(JSON.stringify({ type, ...extra }))
+
+      window.mc = {
+        loaded({ text }) {
+          ta.value = text
+        },
+      }
+
+      ta.addEventListener('input', () => send('dirty', { text: ta.value }))
+
+      ta.addEventListener('keydown', (event) => {
+        if (!event.ctrlKey) return
+        const key = event.key.toLowerCase()
+        if (key === 's') {
+          event.preventDefault()
+          send(event.shiftKey ? 'saveAs' : 'save', { text: ta.value })
+        } else if (key === 'o') {
+          event.preventDefault()
+          send('open')
+        }
+      })
+
+      ta.focus()
+    </script>
+  </body>
+</html>

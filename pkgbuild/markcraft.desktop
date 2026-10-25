@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=MarkCraft
+GenericName=Markdown Editor
+Comment=Markdown editor with Omarchy theme and live preview
+Exec=markcraft %f
+Icon=markcraft
+Terminal=false
+Categories=Office;WordProcessor;TextEditor;
+MimeType=text/markdown;text/x-markdown;text/plain;
+Keywords=markdown;write;notes;text;editor;
+StartupWMClass=markcraft

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Всё, что должно быть зелёным перед закрытием среза.
+# Прогон через живое окно (Ctrl+S на каждой фикстуре) — в docs/PROCESS.md, он ручной.
+set -e
+cd "$(dirname "$0")/.."
+
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+
+echo "ok"

@@ -3,7 +3,7 @@ mod doc;
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gtk::prelude::*;
 use gtk::{
@@ -28,8 +28,9 @@ struct App {
     pending: Cell<bool>,
     /// Восстановленный черновик не пишется в файл, пока пользователь не сохранит сам.
     recovered: Cell<bool>,
-    /// Когда черновик писался в последний раз: на каждую букву — слишком часто.
-    last_draft: Cell<Option<Instant>>,
+    /// Черновик уже запланирован: пишем через 300 мс после последней буквы,
+    /// а не на каждую (burst из семи символов даёт одну запись).
+    draft_pending: Cell<bool>,
     /// Открыт вопрос «сохранить?»: пока пользователь не решил, в файл не пишем.
     asking: Cell<bool>,
     /// Что показать, когда страница догрузилась: черновик важнее файла из argv.
@@ -84,17 +85,20 @@ impl App {
         if !self.dirty.get() {
             return;
         }
-        // Черновик — на каждые 300 мс правки, чтобы kill -9 не съел набранное.
-        let now = Instant::now();
-        if self
-            .last_draft
-            .get()
-            .is_none_or(|t| now.duration_since(t) > DRAFT_EVERY)
-        {
-            self.last_draft.set(Some(now));
-            let _ = draft::write(&self.doc.borrow().text, self.doc.borrow().path());
-        }
+        self.schedule_draft();
         self.schedule_save();
+    }
+
+    fn schedule_draft(self: &Rc<Self>) {
+        if self.draft_pending.get() {
+            return;
+        }
+        self.draft_pending.set(true);
+        let later = self.clone();
+        gtk::glib::timeout_add_local_once(DRAFT_EVERY, move || {
+            later.draft_pending.set(false);
+            let _ = draft::write(&later.doc.borrow().text, later.doc.borrow().path());
+        });
     }
 
     fn schedule_save(self: &Rc<Self>) {
@@ -108,8 +112,10 @@ impl App {
             let _ = draft::write(&later.doc.borrow().text, later.doc.borrow().path());
             // shortcut: автосейв в файл только для документа с путём и не восстановленного;
             // watcher внешних изменений — S1b.
-            if later.doc.borrow().path().is_some() && !later.recovered.get() && !later.asking.get()
-            {
+            // Условие в отдельную переменную: RefCell-borrow в `if` живёт до конца ветки
+            // и паникует на borrow_mut внутри write.
+            let has_path = later.doc.borrow().path().is_some();
+            if has_path && !later.recovered.get() && !later.asking.get() {
                 later.write(false);
             }
         });
@@ -121,14 +127,19 @@ impl App {
 
     /// show_error = false для автосейва: диалог каждые 1.2 с — не помощь.
     fn write(&self, show_error: bool) -> bool {
-        if self.doc.borrow().path().is_none() {
+        let has_path = self.doc.borrow().path().is_some();
+        if !has_path {
             let Some(path) = choose(&self.window, FileChooserAction::Save, "Сохранить как")
             else {
                 return false;
             };
             self.doc.borrow_mut().set_path(with_md(path));
         }
-        if let Err(e) = self.doc.borrow_mut().save() {
+        // Результат в переменную: borrow_mut в `if let` держится всю ветку, а внутри
+        // неё открывается модальный диалог с вложенным циклом событий — таймер
+        // автосейва в этот момент паникует на borrow.
+        let result = self.doc.borrow_mut().save();
+        if let Err(e) = result {
             if show_error {
                 error(
                     &self.window,
@@ -273,7 +284,7 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         pending: Cell::new(false),
         recovered: Cell::new(false),
         asking: Cell::new(false),
-        last_draft: Cell::new(None),
+        draft_pending: Cell::new(false),
         restore: RefCell::new(draft::take()),
         initial,
     });

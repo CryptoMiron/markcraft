@@ -252,6 +252,26 @@ class TableWidget extends WidgetType {
   }
 }
 
+/// Строки блока кода: фон на каждой, рамка — на первой и последней,
+/// иначе граница рисуется между строками.
+function addCodeLines(ranges, doc, node, active) {
+  const range = blockRange({ doc }, node)
+  const first = doc.lineAt(range.from).number
+  const last = doc.lineAt(Math.max(range.from, range.to - 1)).number
+  for (let n = first; n <= last; n++) {
+    const classes = ['mc-code']
+    if (active) classes.push('mc-code-active')
+    if (n === first) classes.push('mc-code-first')
+    if (n === last) classes.push('mc-code-last')
+    ranges.push({
+      from: doc.line(n).from,
+      to: doc.line(n).from,
+      deco: Decoration.line({ class: classes.join(' ') }),
+    })
+  }
+  return { first, last }
+}
+
 /// Ищет границы блока по дереву: от начала строки первого узла до конца строки последнего.
 function blockRange(state, node) {
   const doc = state.doc
@@ -424,31 +444,14 @@ function buildDecorations({ state }) {
           }
           case 'CodeBlock': {
             const range = blockRange(state, node)
-            const active = inRange(state, range.from, range.to)
-            const firstLine = doc.lineAt(range.from).number
-            const lastLine = doc.lineAt(Math.max(range.from, range.to - 1)).number
-            for (let n = firstLine; n <= lastLine; n++) {
-              ranges.push({
-                from: doc.line(n).from,
-                to: doc.line(n).from,
-                deco: Decoration.line({ class: active ? 'mc-code mc-code-active' : 'mc-code' }),
-              })
-            }
+            addCodeLines(ranges, doc, node, inRange(state, range.from, range.to))
             return
           }
           case 'FencedCode': {
             const range = blockRange(state, node)
             const active = inRange(state, range.from, range.to)
-            const firstLine = doc.lineAt(range.from).number
-            const lastLine = doc.lineAt(Math.max(range.from, range.to - 1)).number
-            for (let n = firstLine; n <= lastLine; n++) {
-              ranges.push({
-                from: doc.line(n).from,
-                to: doc.line(n).from,
-                deco: Decoration.line({ class: active ? 'mc-code mc-code-active' : 'mc-code' }),
-              })
-            }
-            if (!active && name === 'FencedCode') {
+            const { first: firstLine, last: lastLine } = addCodeLines(ranges, doc, node, active)
+            if (!active) {
               // Ограда — служебная строка: убираем её целиком вместе с \n.
               const first = doc.line(firstLine)
               const last = doc.line(lastLine)

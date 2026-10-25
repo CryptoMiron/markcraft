@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-10-25 — S2b: legacy-modes вместо грамматик на каждый язык
+
+**Хотели:** `@codemirror/language-data` — он знает все языки.
+**Решили:** 13 языков из `@codemirror/legacy-modes` вручную.
+**Почему:** `language-data` тянет по пакету на язык (Lezer-грамматики, 9–143 KB
+каждый) и грузит их динамически — в офлайн-бандле это лишний вес и лишний
+асинхронный путь. `legacy-modes` — stream-парсеры, они делят один движок.
+Цена: 140 KB бандла на 13 языков.
+**Потолок:** stream-парсеры слабее Lezer на вложенных конструкциях (шаблоны
+внутри строк, JSX). Для чтения кода в заметке хватает.
+
+## 2026-10-25 — `support` должен быть LanguageSupport, а не StreamLanguage
+
+`LanguageDescription.of({ support: StreamLanguage.define(mode) })` не падает
+сразу, а делает так, что `lang-markdown` не подключает парсер: документ
+остаётся одним узлом `Document`, подсветки нет, ошибок нет.
+`lang-markdown` читает `found.support.language.parser`. Правильно —
+обернуть в `new LanguageSupport(...)`. Диагностика: считать
+`document.querySelectorAll('[class^=tok-]').length`, а не смотреть на экран.
+
+---
+
 ## 2026-10-25 — S2: CodeMirror 6, а не свой парсер
 
 **Решили:** CM6 + `@lezer/markdown` с GFM, живое превью на декорациях.

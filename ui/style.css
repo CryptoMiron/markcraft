@@ -12,6 +12,17 @@
   --mc-inline-bg: rgba(23, 23, 23, 0.07);
   --mc-inline-fg: #0f766e;
   --mc-accent: #0f766e;
+  /* Тема кода: спокойная, светлая. */
+  --mc-tok-comment: #8a8f98;
+  --mc-tok-string: #0a7d5a;
+  --mc-tok-number: #b45309;
+  --mc-tok-keyword: #a21caf;
+  --mc-tok-type: #1d4ed8;
+  --mc-tok-func: #0e7490;
+  --mc-tok-prop: #7c3aed;
+  --mc-tok-op: #52525b;
+  --mc-tok-punct: #71717a;
+  --mc-tok-meta: #b45309;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,6 +36,17 @@
     --mc-inline-bg: rgba(255, 255, 255, 0.05);
     --mc-inline-fg: #fb923c;
     --mc-accent: #7dd3fc;
+    /* Тема кода: та же гамма, но светлее — на тёмном фоне. */
+    --mc-tok-comment: #6b7280;
+    --mc-tok-string: #86efac;
+    --mc-tok-number: #fdba74;
+    --mc-tok-keyword: #d8b4fe;
+    --mc-tok-type: #93c5fd;
+    --mc-tok-func: #7dd3fc;
+    --mc-tok-prop: #c4b5fd;
+    --mc-tok-op: #a1a1aa;
+    --mc-tok-punct: #a1a1aa;
+    --mc-tok-meta: #fcd34d;
   }
 }
 
@@ -158,6 +180,39 @@ body {
   color: var(--mc-code-fg);
   padding-left: 16px;
   padding-right: 16px;
+}
+
+/* Подсветка кода: одна тема на все языки, цвета из переменных Omarchy. */
+.cm-line.mc-code .tok-comment {
+  color: var(--mc-tok-comment);
+  font-style: italic;
+}
+.cm-line.mc-code .tok-string {
+  color: var(--mc-tok-string);
+}
+.cm-line.mc-code .tok-number {
+  color: var(--mc-tok-number);
+}
+.cm-line.mc-code .tok-keyword {
+  color: var(--mc-tok-keyword);
+}
+.cm-line.mc-code .tok-type {
+  color: var(--mc-tok-type);
+}
+.cm-line.mc-code .tok-func {
+  color: var(--mc-tok-func);
+}
+.cm-line.mc-code .tok-prop {
+  color: var(--mc-tok-prop);
+}
+.cm-line.mc-code .tok-op {
+  color: var(--mc-tok-op);
+}
+.cm-line.mc-code .tok-punct {
+  color: var(--mc-tok-punct);
+}
+.cm-line.mc-code .tok-meta {
+  color: var(--mc-tok-meta);
 }
 
 /* ─── Списки и задачи ───────────────────────────────────────────────────── */

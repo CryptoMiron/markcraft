@@ -9,6 +9,80 @@ import {
 } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import {
+  StreamLanguage,
+  LanguageDescription,
+  LanguageSupport,
+  syntaxHighlighting,
+  HighlightStyle,
+} from '@codemirror/language'
+import { rust } from '@codemirror/legacy-modes/mode/rust'
+import { python } from '@codemirror/legacy-modes/mode/python'
+import { javascript, json } from '@codemirror/legacy-modes/mode/javascript'
+import { shell } from '@codemirror/legacy-modes/mode/shell'
+import { yaml } from '@codemirror/legacy-modes/mode/yaml'
+import { toml } from '@codemirror/legacy-modes/mode/toml'
+import { sql } from '@codemirror/legacy-modes/mode/sql'
+import { go } from '@codemirror/legacy-modes/mode/go'
+import { c, cpp } from '@codemirror/legacy-modes/mode/clike'
+import { css } from '@codemirror/legacy-modes/mode/css'
+import { xml } from '@codemirror/legacy-modes/mode/xml'
+import { tags } from '@lezer/highlight'
+
+// support передаётся сразу: иначе markdown ставит парсер-заглушку и ждёт
+// асинхронной загрузки, а в бандле грузить нечего — она уже здесь.
+const describe = (name, aliases, mode) => {
+  const support = new LanguageSupport(StreamLanguage.define(mode))
+  return LanguageDescription.of({
+    name,
+    alias: aliases,
+    support,
+    load: async () => support.language,
+  })
+}
+
+const codeLanguages = [
+  describe('Rust', ['rust', 'rs'], rust),
+  describe('Python', ['python', 'py'], python),
+  describe('JavaScript', ['javascript', 'js', 'jsx', 'ts', 'tsx', 'typescript'], javascript),
+  describe('JSON', ['json'], json),
+  describe('Shell', ['sh', 'bash', 'shell', 'zsh'], shell),
+  describe('YAML', ['yaml', 'yml'], yaml),
+  describe('TOML', ['toml'], toml),
+  describe('SQL', ['sql'], sql),
+  describe('Go', ['go', 'golang'], go),
+  describe('C', ['c', 'h'], c),
+  describe('C++', ['cpp', 'c++', 'cc', 'hpp'], cpp),
+  describe('CSS', ['css', 'scss', 'less'], css),
+  describe('XML', ['xml', 'html', 'svg'], xml),
+]
+
+// Одна встроенная тема: цвета берутся из CSS-переменных, поэтому светлая
+// и тёмная темы Omarchy красят код без пересборки.
+const codeHighlight = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.comment, class: 'tok-comment' },
+    { tag: tags.lineComment, class: 'tok-comment' },
+    { tag: tags.blockComment, class: 'tok-comment' },
+    { tag: tags.string, class: 'tok-string' },
+    { tag: tags.special(tags.string), class: 'tok-string' },
+    { tag: tags.number, class: 'tok-number' },
+    { tag: tags.bool, class: 'tok-number' },
+    { tag: tags.null, class: 'tok-number' },
+    { tag: tags.keyword, class: 'tok-keyword' },
+    { tag: tags.controlKeyword, class: 'tok-keyword' },
+    { tag: tags.definitionKeyword, class: 'tok-keyword' },
+    { tag: tags.moduleKeyword, class: 'tok-keyword' },
+    { tag: tags.typeName, class: 'tok-type' },
+    { tag: tags.className, class: 'tok-type' },
+    { tag: tags.function(tags.variableName), class: 'tok-func' },
+    { tag: tags.definition(tags.variableName), class: 'tok-func' },
+    { tag: tags.propertyName, class: 'tok-prop' },
+    { tag: tags.operator, class: 'tok-op' },
+    { tag: tags.punctuation, class: 'tok-punct' },
+    { tag: tags.meta, class: 'tok-meta' },
+  ]),
+)
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { linkHrefAt } from './links.js'
 
@@ -452,7 +526,8 @@ const view = new EditorView({
       history(),
       drawSelection(),
       EditorView.lineWrapping,
-      markdown({ base: markdownLanguage, codeLanguages: [] }),
+      markdown({ base: markdownLanguage, codeLanguages }),
+      codeHighlight,
       livePreview,
       placeholder('Начните писать…'),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),

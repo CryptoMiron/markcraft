@@ -15,7 +15,7 @@ use webkit2gtk::{LoadEvent, UserContentManager, UserContentManagerExt, WebView, 
 
 use doc::{Disk, Doc, draft, geometry};
 
-const UI_HTML: &str = include_str!("../ui/index.html");
+const UI_HTML: &str = include_str!("../ui/built.html");
 const AUTOSAVE: Duration = Duration::from_millis(1200);
 const DRAFT_EVERY: Duration = Duration::from_millis(300);
 /// Как часто проверяем, не изменил ли файл кто-то снаружи. Дешевле inotify
@@ -182,6 +182,12 @@ impl App {
     fn load(&self, path: &Path) {
         match Doc::open(path) {
             Ok(doc) => {
+                let same_dir = self
+                    .doc
+                    .borrow()
+                    .path()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                    == path.parent().map(|d| d.to_path_buf());
                 *self.doc.borrow_mut() = doc;
                 self.gone_reported.set(false);
                 // Всё, что было в редакторе, заменено диском: несохранённого нет,
@@ -189,10 +195,25 @@ impl App {
                 self.dirty.set(false);
                 self.recovered.set(false);
                 draft::clear();
-                self.push();
+                if same_dir {
+                    self.push();
+                } else {
+                    // Картинки резолвятся от папки документа: другая папка — другая база.
+                    self.reload_page();
+                }
             }
             Err(e) => error(&self.window, &format!("{}: {e}", path.display())),
         }
+    }
+
+    /// Перезагружает страницу с базой текущего документа и снова отдаёт текст.
+    fn reload_page(&self) {
+        let base = self
+            .doc
+            .borrow()
+            .path()
+            .and_then(|p| p.parent().map(|d| format!("file://{}/", d.display())));
+        self.webview.load_html(UI_HTML, base.as_deref());
     }
 
     fn open_dialog(&self) {
@@ -435,6 +456,12 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
                 sender.save_as();
             }
             "open" => sender.open_dialog(),
+            "openUrl" => {
+                let url = message["url"].as_str().unwrap_or_default();
+                if !url.is_empty() {
+                    let _ = gtk::show_uri_on_window(Some(&sender.window), url, 0);
+                }
+            }
             _ => {}
         }
     });
@@ -458,8 +485,23 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
 
     state.watch_disk();
 
+    // Относительные картинки должны находиться рядом с документом.
+    // Для безымянного черновика базы нет — картинки покажутся плейсхолдером.
+    let base = state
+        .doc
+        .borrow()
+        .path()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .or_else(|| {
+            state
+                .initial
+                .as_ref()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        })
+        .map(|d| format!("file://{}/", d.display()));
+
     window.add(&webview);
-    webview.load_html(UI_HTML, None);
+    webview.load_html(UI_HTML, base.as_deref());
     window.show_all();
     webview.grab_focus();
 }

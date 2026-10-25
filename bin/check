@@ -7,5 +7,14 @@ cd "$(dirname "$0")/.."
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
+bun test ui/
+
+# ui/built.html коммитится, чтобы `cargo build` работал без bun.
+# Если он разошёлся с исходниками — сборка забыта.
+./bin/bundle >/dev/null
+if ! git diff --quiet -- ui/built.html; then
+  echo "ui/built.html устарел: закоммить после bin/bundle" >&2
+  exit 1
+fi
 
 echo "ok"

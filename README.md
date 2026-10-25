@@ -18,7 +18,7 @@ Markdown-редактор для Omarchy: файл — источник исти
 | S0 Каркас | готов — окно на нативном Wayland |
 | S1 Файлы | готов — байтовая верность, автосейв, черновик, диалоги |
 | S1b Внешние изменения | готов — опрос файла, диалоги, удаление |
-| S2 Рендер | не начат |
+| S2 Рендер | почти готов — открыт R2.3 (подсветка кода) |
 | S3 Правка | не начат |
 | S4 Omarchy | не начат |
 | S5 Клавиши | не начат |
@@ -26,10 +26,14 @@ Markdown-редактор для Omarchy: файл — источник исти
 ## Сборка
 
 ```sh
+bin/bundle          # ui/*.js|css → ui/built.html (нужен bun)
 cargo build --release
 ./target/release/markcraft fixtures/gfm-full.md
 bin/check
 ```
+
+`ui/built.html` коммитится: `cargo build` работает без bun. После правки
+`ui/*.js|css` обязателен `bin/bundle`, иначе `bin/check` упадёт.
 
 Пакет: `cd pkgbuild && makepkg -f`.
 

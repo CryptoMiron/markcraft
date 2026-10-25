@@ -1,0 +1,17 @@
+#!/bin/sh
+# Собирает ui/built.html: один файл без сети, который Rust вкомпилирует в бинарник.
+# Запускать после правки ui/*.js и ui/*.css. `cargo build` сам этого не делает,
+# потому что тянет bun — а он нужен только тому, кто правит интерфейс.
+set -e
+cd "$(dirname "$0")/.."
+
+bun build ui/editor.js --format=iife --minify --outfile=ui/editor.bundle.js >/dev/null
+python3 - <<'PY'
+import pathlib
+template = pathlib.Path('ui/template.html').read_text()
+style = pathlib.Path('ui/style.css').read_text()
+script = pathlib.Path('ui/editor.bundle.js').read_text()
+out = template.replace('/*__STYLE__*/', style).replace('/*__SCRIPT__*/', script)
+pathlib.Path('ui/built.html').write_text(out)
+print(f'ui/built.html: {len(out) // 1024} KB')
+PY

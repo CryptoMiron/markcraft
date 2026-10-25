@@ -14,7 +14,7 @@
 | Разметка | `ui/links.js` | адрес ссылки под курсором; 6 тестов |
 | Движок | `ui/editor.js` | CM6, `@lezer/markdown` + GFM, декорации |
 | Типографика | `ui/style.css` | числа из `docs/TYPOGRAPHY.md` |
-| Сборка | `bin/bundle` | bun → один `ui/built.html` (512 KB) + вкомпилирование |
+| Сборка | `bin/bundle` | bun → один `ui/built.html` (516 KB) + вкомпилирование |
 
 `ui/built.html` коммитится, чтобы `cargo build` работал без bun. `bin/check`
 пересобирает его и падает, если закоммиченная версия разошлась с исходниками.

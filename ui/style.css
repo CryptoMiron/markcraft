@@ -12,21 +12,11 @@
   --mc-inline-bg: rgba(23, 23, 23, 0.07);
   --mc-inline-fg: #0f766e;
   --mc-accent: #0f766e;
+  --mc-selection: rgba(128, 128, 128, 0.3);
+  --mc-selection-fg: var(--mc-fg);
+  --mc-table-head: rgba(128, 128, 128, 0.12);
 }
 
-/* Блок кода тёмный в обеих темах (как в Inkdown), поэтому и токены одни. */
-:root {
-  --mc-tok-comment: #7d8590;
-  --mc-tok-string: #86efac;
-  --mc-tok-number: #fdba74;
-  --mc-tok-keyword: #d8b4fe;
-  --mc-tok-type: #93c5fd;
-  --mc-tok-func: #7dd3fc;
-  --mc-tok-prop: #c4b5fd;
-  --mc-tok-op: #a1a1aa;
-  --mc-tok-punct: #a1a1aa;
-  --mc-tok-meta: #fcd34d;
-}
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -39,6 +29,9 @@
     --mc-inline-bg: rgba(255, 255, 255, 0.05);
     --mc-inline-fg: #fb923c;
     --mc-accent: #7dd3fc;
+    --mc-selection: rgba(128, 128, 128, 0.3);
+    --mc-selection-fg: var(--mc-fg);
+    --mc-table-head: rgba(128, 128, 128, 0.12);
   }
 }
 
@@ -76,10 +69,13 @@ body {
 }
 
 .cm-editor .cm-content {
+  box-sizing: border-box;
   max-width: 700px;
   width: 100%;
   margin: 0 auto;
-  padding: 5vh 0 360px;
+  /* Поля внутри колонки: колонка может дойти до края окна, но текст
+     не должен упираться в рамку. */
+  padding: 5vh 24px 360px;
   caret-color: var(--mc-fg);
 }
 
@@ -245,7 +241,7 @@ body {
 }
 .mc-table th {
   font-weight: 700;
-  background: rgba(128, 128, 128, 0.12);
+  background: var(--mc-table-head);
 }
 
 /* ─── Прочее ────────────────────────────────────────────────────────────── */
@@ -292,5 +288,6 @@ body {
 }
 
 ::selection {
-  background: rgba(128, 128, 128, 0.3);
+  background: var(--mc-selection);
+  color: var(--mc-selection-fg);
 }

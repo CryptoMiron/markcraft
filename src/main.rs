@@ -1,4 +1,5 @@
 mod doc;
+mod theme;
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
@@ -14,6 +15,7 @@ use javascriptcore::ValueExt;
 use webkit2gtk::{LoadEvent, UserContentManager, UserContentManagerExt, WebView, WebViewExt};
 
 use doc::{Disk, Doc, draft, geometry};
+use theme::Theme;
 
 const UI_HTML: &str = include_str!("../ui/built.html");
 const AUTOSAVE: Duration = Duration::from_millis(1200);
@@ -43,6 +45,11 @@ struct App {
     /// Что показать, когда страница догрузилась: черновик важнее файла из argv.
     restore: RefCell<Option<draft::Draft>>,
     initial: Option<PathBuf>,
+    /// Палитра и масштаб из Omarchy. Перечитывается при смене темы.
+    theme: RefCell<Theme>,
+    /// Мониторы каталога темы. Держим здесь: локальная переменная умерла бы
+    /// вместе с build_window, и смена темы перестала бы замечаться.
+    monitors: RefCell<Vec<gtk::gio::FileMonitor>>,
 }
 
 impl App {
@@ -50,6 +57,34 @@ impl App {
         let star = if self.dirty.get() { "* " } else { "" };
         self.window
             .set_title(&format!("{star}{} — MarkCraft", self.doc.borrow().name()));
+    }
+
+    /// Отдаёт странице палитру и размер текста. Вызывается и при смене темы.
+    fn apply_theme(&self) {
+        let theme = self.theme.borrow();
+        let css = format!(
+            "{}\n.cm-editor .cm-scroller{{font-size:{}px}}\n.cm-editor .cm-content{{max-width:min({}px, 100%)}}",
+            theme.css(),
+            theme.scaled(16.0),
+            theme.column()
+        );
+        self.webview.evaluate_javascript(
+            &format!("window.mc && window.mc.theme({})", serde_json::json!(css)),
+            None,
+            None,
+            None::<&gtk::gio::Cancellable>,
+            |_| {},
+        );
+    }
+
+    /// Перечитывает тему с диска: Omarchy переключил палитру.
+    fn reload_theme(&self) {
+        let fresh = Theme::load();
+        if *self.theme.borrow() == fresh {
+            return;
+        }
+        *self.theme.borrow_mut() = fresh;
+        self.apply_theme();
     }
 
     fn push(&self) {
@@ -69,6 +104,7 @@ impl App {
 
     /// Первый показ документа после загрузки страницы.
     fn start(&self) {
+        self.apply_theme();
         if let Some(draft) = self.restore.borrow_mut().take() {
             if let Some(path) = &draft.path {
                 self.doc.borrow_mut().set_path(path.clone());
@@ -434,6 +470,8 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         draft_pending: Cell::new(false),
         restore: RefCell::new(draft::take()),
         initial,
+        theme: RefCell::new(Theme::load()),
+        monitors: RefCell::new(Vec::new()),
     });
 
     let sender = state.clone();
@@ -499,6 +537,15 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
     });
 
     state.watch_disk();
+
+    // Смена темы в Omarchy: перекрашиваем без рестарта. Weak, а не Rc:
+    // иначе монитор держит состояние, которое держит монитор.
+    let repaint = Rc::downgrade(&state);
+    *state.monitors.borrow_mut() = theme::watch(move || {
+        if let Some(app) = repaint.upgrade() {
+            app.reload_theme();
+        }
+    });
 
     // Относительные картинки должны находиться рядом с документом.
     // Для безымянного черновика базы нет — картинки покажутся плейсхолдером.

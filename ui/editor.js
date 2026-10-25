@@ -1,10 +1,4 @@
-import {
-  EditorState,
-  Compartment,
-  StateField,
-  StateEffect,
-  Transaction,
-} from '@codemirror/state'
+import { EditorState, StateField, StateEffect, Transaction } from '@codemirror/state'
 import {
   EditorView,
   Decoration,
@@ -626,8 +620,6 @@ const editingKeys = [
 
 // ─── Редактор ───────────────────────────────────────────────────────────────
 
-const themeCompartment = new Compartment()
-
 const view = new EditorView({
   parent: document.getElementById('editor'),
   state: EditorState.create({
@@ -689,7 +681,6 @@ const view = new EditorView({
           return false
         },
       }),
-      themeCompartment.of(EditorView.theme({})),
     ],
   }),
 })
@@ -713,8 +704,15 @@ window.mc = {
   insert({ text }) {
     view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: 'input' })
   },
+  /// Палитра и размер текста приходят из Omarchy одной строкой CSS.
   theme(css) {
-    view.dispatch({ effects: themeCompartment.reconfigure(EditorView.theme(css)) })
+    let style = document.getElementById('mc-theme')
+    if (!style) {
+      style = document.createElement('style')
+      style.id = 'mc-theme'
+      document.head.append(style)
+    }
+    style.textContent = css
   },
 }
 

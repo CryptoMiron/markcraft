@@ -2,6 +2,10 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
+    <!-- Без viewport WebKitGTK включает shrink-to-fit: при узком окне
+         страница масштабируется целиком вместо перестройки строк, и
+         координаты мыши перестают совпадать с позициями текста. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MarkCraft</title>
     <style>
       /*__STYLE__*/

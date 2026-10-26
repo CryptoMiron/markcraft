@@ -474,6 +474,7 @@ Ctrl+B — жирный
 Ctrl+I — курсив
 Ctrl+Shift+X — зачёркнутый
 Ctrl+K — ссылка
+Ctrl+клик по ссылке — открыть в браузере
 
 Поиск
 Ctrl+F — поиск
@@ -545,7 +546,9 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
         .default_width(width)
         .default_height(height)
         .build();
-    window.set_size_request(720, 520);
+    // В тайлинге Hyprland окно обязано ужиматься: 720 px минимума мешали
+    // сузить окно и провоцировали «сплющивание» содержимого.
+    window.set_size_request(280, 200);
 
     let manager = UserContentManager::new();
     manager.register_script_message_handler("ipc");

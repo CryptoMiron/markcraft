@@ -27,3 +27,10 @@ export function linkHrefAt(text, pos) {
 
   return null
 }
+
+/// Открывается ли ссылка этим нажатием. Только Ctrl/Cmd + левая кнопка:
+/// обычный клик обязан ставить курсор и начинать выделение, иначе в текст
+/// ссылки нельзя попасть мышью.
+export function opensLinkOn(event) {
+  return event.button === 0 && Boolean(event.ctrlKey || event.metaKey)
+}

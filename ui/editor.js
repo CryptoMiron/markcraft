@@ -86,7 +86,8 @@ import {
 } from '@codemirror/commands'
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
 import MarkdownIt from 'markdown-it'
-import { linkHrefAt } from './links.js'
+import { linkHrefAt, opensLinkOn } from './links.js'
+import { findFrontmatter } from './frontmatter.js'
 import { actionFor } from './hotkeys.js'
 import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.js'
 
@@ -242,7 +243,10 @@ class TableWidget extends WidgetType {
       })
     }
     // Клик по таблице ставит курсор в её начало: иначе в неё не попасть.
+    // Только если это именно клик: конец перетаскивания выделения тоже даёт
+    // click, и без проверки он перепрыгивал бы в начало таблицы.
     table.onclick = () => {
+      if (!window.getSelection()?.isCollapsed) return
       view.dispatch({ selection: { anchor: this.pos }, scrollIntoView: true })
       view.focus()
     }
@@ -302,6 +306,25 @@ function buildDecorations({ state }) {
   }
 
   const tree = syntaxTree(state)
+
+  // Шапка файла (frontmatter) — это YAML, а не Markdown. Без отдельной
+  // проверки парсер делает из неё заголовок setext и прячет закрывающий
+  // `---`, поэтому блок распознаём сами и рисуем как код.
+  const fm = findFrontmatter(doc)
+  if (fm) {
+    for (let n = fm.first; n <= fm.last; n++) {
+      const line = doc.line(n)
+      const classes = ['mc-code']
+      if (n === fm.first) classes.push('mc-code-first')
+      if (n === fm.last) classes.push('mc-code-last')
+      ranges.push({
+        from: line.from,
+        to: line.from,
+        deco: Decoration.line({ class: classes.join(' ') }),
+      })
+    }
+  }
+
   {
     tree.iterate({
       from: 0,
@@ -310,6 +333,9 @@ function buildDecorations({ state }) {
         const name = node.name
         const line = doc.lineAt(node.from)
         const active = lineActive(state, line)
+
+        // Внутри шапки разметку не разбираем: там YAML, а не Markdown.
+        if (fm && node.from >= fm.from && node.to <= fm.to) return
 
         switch (name) {
           case 'ATXHeading1':
@@ -759,8 +785,11 @@ const view = new EditorView({
           return false
         },
         mousedown(event, view) {
+          // Ссылка открывается только по Ctrl/Cmd+клик, как в редакторах кода.
+          // Обычный клик обязан ставить курсор и начинать выделение, иначе
+          // в текст ссылки нельзя попасть и нельзя потянуть выделение с неё.
           const link = event.target.closest?.('.mc-link')
-          if (!link || event.ctrlKey || event.metaKey || event.button !== 0) return false
+          if (!link || !opensLinkOn(event)) return false
           const pos = view.posAtDOM(link)
           const href = linkHrefAt(view.state.doc.toString(), pos)
           if (!href) return false

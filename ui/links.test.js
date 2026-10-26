@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { linkHrefAt } from './links.js'
+import { linkHrefAt, opensLinkOn } from './links.js'
 
 const doc = [
   'Абзац [ссылка](https://example.com/a "t") и ещё.',
@@ -37,4 +37,23 @@ test('обычный текст — не ссылка', () => {
 
 test('ссылка без адреса не притворяется ссылкой', () => {
   expect(linkHrefAt(doc, doc.indexOf('[текст]') + 2)).toBeNull()
+})
+
+// ─── Когда ссылка открывается ───────────────────────────────────────────────
+
+test('обычный клик по ссылке не открывает её', () => {
+  expect(opensLinkOn({ button: 0 })).toBe(false)
+})
+
+test('Ctrl+клик открывает ссылку', () => {
+  expect(opensLinkOn({ button: 0, ctrlKey: true })).toBe(true)
+})
+
+test('Cmd+клик открывает ссылку', () => {
+  expect(opensLinkOn({ button: 0, metaKey: true })).toBe(true)
+})
+
+test('средняя и правая кнопки ссылку не открывают', () => {
+  expect(opensLinkOn({ button: 1, ctrlKey: true })).toBe(false)
+  expect(opensLinkOn({ button: 2, ctrlKey: true })).toBe(false)
 })

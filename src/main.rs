@@ -24,6 +24,10 @@ const DRAFT_EVERY: Duration = Duration::from_millis(300);
 /// и не требует прав на каталог.
 const WATCH_EVERY: Duration = Duration::from_millis(700);
 
+/// Окна, открытые по файлу: путь → окно. Нужен, чтобы повторный запуск
+/// с тем же файлом поднимал уже открытое окно, а не плодил копии.
+type OpenFiles = Rc<RefCell<Vec<(PathBuf, ApplicationWindow)>>>;
+
 struct App {
     window: ApplicationWindow,
     webview: WebView,
@@ -50,6 +54,10 @@ struct App {
     /// Мониторы каталога темы. Держим здесь: локальная переменная умерла бы
     /// вместе с build_window, и смена темы перестала бы замечаться.
     monitors: RefCell<Vec<gtk::gio::FileMonitor>>,
+    /// Приложение и реестр окон: нужны, чтобы Ctrl+N и открытие файла
+    /// создавали окно здесь, а не через второй процесс.
+    app: Application,
+    open_files: OpenFiles,
 }
 
 impl App {
@@ -268,11 +276,9 @@ impl App {
         self.apply_theme();
     }
 
-    /// Ctrl+N: новое окно. Отдельный процесс — проще, чем второе окно в том же.
+    /// Ctrl+N: новое пустое окно в этом же процессе.
     fn new_window(&self) {
-        if let Ok(exe) = std::env::current_exe() {
-            let _ = std::process::Command::new(exe).spawn();
-        }
+        build_window(&self.app, None, &self.open_files);
     }
 
     fn open_dialog(&self) {
@@ -531,7 +537,7 @@ fn error(parent: &ApplicationWindow, text: &str) {
     dialog.close();
 }
 
-fn build_window(app: &Application, initial: Option<PathBuf>) {
+fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFiles) {
     let (width, height) = geometry::read().unwrap_or((980, 760));
     let window = ApplicationWindow::builder()
         .application(app)
@@ -561,6 +567,8 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         initial,
         theme: RefCell::new(Theme::load()),
         monitors: RefCell::new(Vec::new()),
+        app: app.clone(),
+        open_files: open_files.clone(),
     });
 
     let sender = state.clone();
@@ -662,6 +670,19 @@ fn build_window(app: &Application, initial: Option<PathBuf>) {
         })
         .map(|d| format!("file://{}/", d.display()));
 
+    // `initial` уже переехал в состояние; для реестра берём путь оттуда.
+    if let Some(path) = state.initial.clone() {
+        let key = path.canonicalize().unwrap_or(path);
+        open_files.borrow_mut().push((key, window.clone()));
+    }
+
+    // Закрытое окно не должно оставаться в реестре: иначе повторное открытие
+    // того же файла попытается поднять мёртвое окно.
+    let registry = open_files.clone();
+    window.connect_destroy(move |window| {
+        registry.borrow_mut().retain(|(_, w)| w != window);
+    });
+
     window.add(&webview);
     webview.load_html(UI_HTML, base.as_deref());
     window.show_all();
@@ -679,15 +700,49 @@ fn main() {
         return;
     }
 
-    let initial = args
-        .into_iter()
-        .find(|a| !a.starts_with('-'))
-        .map(PathBuf::from);
+    let files: Vec<PathBuf> = args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .map(PathBuf::from)
+        .collect();
 
+    // HANDLES_OPEN: GApplication сам передаёт файлы уже запущенному экземпляру
+    // через сигнал `open`. Без флага второй запуск слал только `activate`,
+    // и приложение открывало прежний файл вместо нового.
     let app = Application::builder()
         .application_id("app.markcraft.MarkCraft")
+        .flags(gtk::gio::ApplicationFlags::HANDLES_OPEN)
         .build();
-    app.connect_activate(move |app| build_window(app, initial.clone()));
-    // Аргументы разобраны выше; GTK не должен пытаться открыть файл сам.
-    app.run_with_args::<&str>(&[]);
+
+    let open_files: OpenFiles = Rc::new(RefCell::new(Vec::new()));
+
+    let registry = open_files.clone();
+    app.connect_activate(move |app| build_window(app, None, &registry));
+
+    let registry = open_files.clone();
+    app.connect_open(move |app, files, _| {
+        for file in files {
+            let Some(path) = file.path() else { continue };
+            let key = path.canonicalize().unwrap_or_else(|_| path.clone());
+
+            // Тот же файл уже открыт — поднимаем его окно, а не второе.
+            let existing = registry
+                .borrow()
+                .iter()
+                .find(|(p, _)| *p == key)
+                .map(|(_, w)| w.clone());
+            if let Some(window) = existing {
+                window.present();
+                continue;
+            }
+
+            build_window(app, Some(path), &registry);
+        }
+    });
+
+    // Первый элемент — имя программы, как в argv: остальное GApplication
+    // разбирает сам и решает, слать `open` или `activate`.
+    let mut argv: Vec<String> = vec!["markcraft".to_owned()];
+    argv.extend(files.iter().map(|p| p.to_string_lossy().into_owned()));
+    app.run_with_args(&argv);
 }

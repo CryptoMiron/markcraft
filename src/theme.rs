@@ -11,8 +11,10 @@ pub struct Theme {
     pub background: String,
     pub foreground: String,
     pub accent: String,
+    /// Цвет выделения из `colors.toml`: им подсвечиваются совпадения поиска.
     pub selection: String,
-    pub selection_foreground: String,
+    /// Граница активного окна из `shell.toml` — фон выделения текста.
+    pub active_border: String,
     pub muted: String,
     pub code_background: String,
     /// Что просит рабочий стол (GNOME `text-scaling-factor`), 12 px = 1.0.
@@ -31,7 +33,7 @@ impl Default for Theme {
             foreground: "#eeeeee".into(),
             accent: "#7aa2f7".into(),
             selection: "#2f3549".into(),
-            selection_foreground: "#f2efe6".into(),
+            active_border: "#7aa2f7".into(),
             muted: "#909191".into(),
             code_background: "#1c1c1c".into(),
             text_scale: 1.0,
@@ -124,13 +126,16 @@ fn blend(base: &str, other: &str, amount: f64) -> String {
 }
 
 impl Theme {
-    /// Читает `colors.toml` и масштаб текста. Любая ошибка — дефолт, а не паника.
+    /// Читает `colors.toml`, `shell.toml` и масштаб текста. Любая ошибка — дефолт, а не паника.
     pub fn load() -> Self {
         let mut theme = Theme::default();
-        if let Some(dir) = theme_dir()
-            && let Ok(text) = fs::read_to_string(dir.join("colors.toml"))
-        {
-            theme.apply_colors(&text);
+        if let Some(dir) = theme_dir() {
+            if let Ok(text) = fs::read_to_string(dir.join("colors.toml")) {
+                theme.apply_colors(&text);
+            }
+            if let Ok(text) = fs::read_to_string(dir.join("shell.toml")) {
+                theme.apply_border(&text);
+            }
         }
         theme.text_scale = read_text_scale();
         theme.zoom = read_zoom();
@@ -168,6 +173,9 @@ impl Theme {
         if let Some(c) = map.get("accent").filter(|c| luminance(c).is_some()) {
             self.accent = c.clone();
         }
+        // Рамки активного окна в colors.toml нет: она в shell.toml. Пока его
+        // не прочитали, ближайший смысл «цвета границы» — акцент темы.
+        self.active_border = self.accent.clone();
         if let Some(c) = map.get("muted").filter(|c| luminance(c).is_some()) {
             self.muted = c.clone();
         }
@@ -180,12 +188,6 @@ impl Theme {
         if let Some(c) = map.get("selection").filter(|c| luminance(c).is_some()) {
             self.selection = c.clone();
         }
-        self.selection_foreground = map
-            .get("selection_foreground")
-            .or_else(|| map.get("bright_foreground"))
-            .filter(|c| luminance(c).is_some())
-            .cloned()
-            .unwrap_or_else(|| self.foreground.clone());
 
         // Панель кода: lighter_background темы, иначе лёгкая примесь текста.
         // Примесь, а не осветление: на чисто чёрном фоне осветление не видно.
@@ -194,6 +196,18 @@ impl Theme {
             .filter(|c| luminance(c).is_some() && *c != &self.background)
             .cloned()
             .unwrap_or_else(|| blend(&self.background, &self.foreground, 0.06));
+    }
+
+    /// Граница активного окна: Omarchy кладёт её в `shell.toml` из Hyprland.
+    /// В `colors.toml` её нет, а `selection` подобран под фон окна и на панели
+    /// кода сливается. Нет файла или битый цвет — остаётся акцент темы.
+    fn apply_border(&mut self, text: &str) {
+        if let Some(color) = parse_colors(text)
+            .get("active-border")
+            .filter(|c| luminance(c).is_some())
+        {
+            self.active_border = color.clone();
+        }
     }
 
     /// Токены подсветки зависят от фона блока кода, а не от темы окна:
@@ -222,14 +236,11 @@ impl Theme {
         )
     }
 
-    /// Цвет выделения, подмешанный к тексту.
-    ///
-    /// Тема Omarchy задаёт `selection` под свой фон окна, а не под панель кода:
-    /// в tokyo-night это `#292e42` при панели `#24283b` — разницы не видно.
-    /// Поэтому сдвигаем выделение к цвету текста, пока оно не станет заметным.
-    fn selection_css(&self) -> String {
+    /// Цвет, сдвинутый к тексту, пока он не станет заметным на обоих фонах:
+    /// тема задаёт цвета под своё окно, а не под панель кода.
+    fn visible(&self, base: &str) -> String {
         let mut amount = 0.0;
-        let mut color = self.selection.clone();
+        let mut color = base.to_owned();
         // Шаг 0.1, предел 0.7. Порог 140 из 765: при 45 разница формально есть,
         // но глазом не видна — на этом и потеряли выделение в первый раз.
         while amount < 0.7
@@ -237,9 +248,25 @@ impl Theme {
                 || contrast(&color, &self.code_background) < 140)
         {
             amount += 0.1;
-            color = blend(&self.selection, &self.foreground, amount);
+            color = blend(base, &self.foreground, amount);
         }
         color
+    }
+
+    /// Подсветка совпадений поиска: `selection` из colors.toml, но заметная.
+    fn search_css(&self) -> String {
+        self.visible(&self.selection)
+    }
+
+    /// Текст на выделении: тот цвет темы, который дальше от фона выделения.
+    /// Обычно это фон страницы — на яркой рамке окна светлый текст не читается.
+    fn selection_fg(&self) -> String {
+        let bg = self.visible(&self.active_border);
+        if contrast(&bg, &self.foreground) > contrast(&bg, &self.background) {
+            self.foreground.clone()
+        } else {
+            self.background.clone()
+        }
     }
 
     /// CSS-переменные для страницы. Одна строка — один слой правды о цвете.
@@ -252,7 +279,7 @@ impl Theme {
         format!(
             ":root{{color-scheme:{};--mc-bg:{};--mc-fg:{};--mc-accent:{};\
 --mc-muted:{};--mc-border:{};--mc-inline-bg:{};--mc-code-bg:{};\
---mc-selection:{};--mc-selection-fg:{};--mc-table-head:{};{}}}",
+--mc-selection:{};--mc-selection-fg:{};--mc-search:{};--mc-table-head:{};{}}}",
             if self.dark { "dark" } else { "light" },
             self.background,
             self.foreground,
@@ -261,8 +288,9 @@ impl Theme {
             border,
             inline_bg,
             self.code_background,
-            self.selection_css(),
-            self.selection_foreground,
+            self.visible(&self.active_border),
+            self.selection_fg(),
+            self.search_css(),
             table_head,
             self.token_css(),
         )
@@ -402,7 +430,31 @@ bright_foreground = "#c0caf5"
         assert_eq!(theme.accent, "#7aa2f7");
         assert_eq!(theme.code_background, "#24283b");
         assert_eq!(theme.selection, "#292e42");
-        assert_eq!(theme.selection_foreground, "#c0caf5");
+        // В colors.toml рамки нет: пока shell.toml не прочитан, это акцент.
+        assert_eq!(theme.active_border, "#7aa2f7");
+    }
+
+    #[test]
+    fn active_border_from_shell_toml() {
+        let mut theme = Theme::default();
+        theme.apply_colors(TOKYO);
+        theme.apply_border("active-border = \"#f7768e\"\n");
+        assert_eq!(theme.active_border, "#f7768e");
+        // Битая ссылка или градиент не должны затирать цвет.
+        theme.apply_border("active-border = \"rgba(1,2,3,0.5)\"\n");
+        assert_eq!(theme.active_border, "#f7768e");
+    }
+
+    #[test]
+    fn selection_uses_border_and_readable_text() {
+        let mut theme = Theme::default();
+        theme.apply_colors(TOKYO);
+        theme.apply_border("active-border = \"#7aa2f7\"\n");
+        let css = theme.css();
+        assert!(css.contains("--mc-selection:#7aa2f7"), "{css}");
+        assert!(css.contains("--mc-selection-fg:#1a1b26"), "{css}");
+        // Совпадения поиска остаются на прежнем приглушённом цвете.
+        assert!(css.contains("--mc-search:#"), "{css}");
     }
 
     #[test]
@@ -486,7 +538,7 @@ bright_foreground = "#c0caf5"
     }
 
     #[test]
-    fn selection_is_visible_on_page_and_on_code() {
+    fn search_is_visible_on_page_and_on_code() {
         for (name, colors) in [
             (
                 "tokyo-night",
@@ -501,29 +553,29 @@ selection = \"#ccd0da\"\n",
         ] {
             let mut theme = Theme::default();
             theme.apply_colors(colors);
-            let selection = theme.selection_css();
+            let selection = theme.search_css();
             assert!(
                 contrast(&selection, &theme.background) >= 140,
-                "{name}: выделение {selection} сливается с фоном {}",
+                "{name}: поиск {selection} сливается с фоном {}",
                 theme.background
             );
             assert!(
                 contrast(&selection, &theme.code_background) >= 140,
-                "{name}: выделение {selection} сливается с панелью кода {}",
+                "{name}: поиск {selection} сливается с панелью кода {}",
                 theme.code_background
             );
         }
     }
 
     #[test]
-    fn selection_stays_close_to_theme_colour() {
+    fn search_stays_close_to_theme_colour() {
         // Если в теме выделение уже контрастное, его не трогаем.
         let mut theme = Theme::default();
         theme.apply_colors(
             "mode = \"dark\"\nbackground = \"#000000\"\nforeground = \"#ffffff\"\n\
 selection = \"#4466aa\"\n",
         );
-        assert_eq!(theme.selection_css(), "#4466aa");
+        assert_eq!(theme.search_css(), "#4466aa");
     }
 
     #[test]
@@ -572,6 +624,7 @@ selection = \"#4466aa\"\n",
             "--mc-code-bg",
             "--mc-selection",
             "--mc-selection-fg",
+            "--mc-search",
             "--mc-table-head",
         ] {
             assert!(css.contains(var), "в CSS нет {var}");

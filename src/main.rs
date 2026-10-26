@@ -620,6 +620,12 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
                 let text = message["text"].as_str().unwrap_or_default();
                 copy_html(html, text);
             }
+            "copyText" => {
+                let clipboard = gtk::Clipboard::get(&gtk::gdk::SELECTION_CLIPBOARD);
+                clipboard.set_text(text);
+                // store(): иначе после закрытия окна буфер опустеет.
+                clipboard.store();
+            }
             "openUrl" => {
                 let url = message["url"].as_str().unwrap_or_default();
                 if !url.is_empty() {

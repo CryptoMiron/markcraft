@@ -190,6 +190,57 @@ body {
   border-bottom-right-radius: 4px;
 }
 
+/* Жёлоб под номера строк. Шапка файла (frontmatter) тоже рисуется классами
+   mc-code, но блоком кода не является и остаётся без жёлоба. */
+.cm-line.mc-code-block {
+  position: relative;
+  padding-left: 48px;
+  padding-right: 30px;
+}
+
+/* Номер вне потока текста: не участвует в переносе и не попадает в выделение. */
+.cm-line.mc-code[data-num]::before {
+  content: attr(data-num);
+  position: absolute;
+  top: 0;
+  left: 8px;
+  width: 34px;
+  text-align: right;
+  color: var(--mc-muted);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Копирование: правый верхний угол блока. */
+.mc-copy {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mc-code-fg);
+  font-size: 12px;
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.mc-copy:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.22);
+}
+
+.mc-copy svg {
+  display: block;
+}
+
 /* Подсветка кода: одна тема на все языки, цвета из переменных Omarchy. */
 .cm-line.mc-code .tok-comment {
   color: var(--mc-tok-comment);

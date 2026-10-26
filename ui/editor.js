@@ -88,6 +88,7 @@ import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
 import MarkdownIt from 'markdown-it'
 import { linkHrefAt, opensLinkOn } from './links.js'
 import { findFrontmatter } from './frontmatter.js'
+import { codeBody } from './code-block.js'
 import { actionFor } from './hotkeys.js'
 import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.js'
 
@@ -171,6 +172,40 @@ class RuleWidget extends WidgetType {
     const hr = document.createElement('hr')
     hr.className = 'mc-hr'
     return hr
+  }
+}
+
+/// Кнопка «копировать» в правом верхнем углу блока. Текст приходит готовым:
+/// без ограды и без отступа отступного кода.
+class CopyWidget extends WidgetType {
+  constructor(text) {
+    super()
+    this.text = text
+  }
+  eq(other) {
+    return other.text === this.text
+  }
+  toDOM() {
+    const button = document.createElement('button')
+    button.className = 'mc-copy'
+    button.type = 'button'
+    button.title = 'Копировать код'
+    button.setAttribute('aria-label', 'Копировать код')
+    button.contentEditable = 'false'
+    // Без этого клик по кнопке уводит фокус из редактора.
+    button.onmousedown = (event) => event.preventDefault()
+    button.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">' +
+      '<rect x="5" y="5" width="9" height="10" rx="1.5"/>' +
+      '<path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v8A1.5 1.5 0 0 0 3.5 13H5"/>' +
+      '</svg>'
+    const icon = button.innerHTML
+    button.onclick = () => {
+      send('copyText', { text: this.text })
+      button.textContent = '✓'
+      setTimeout(() => (button.innerHTML = icon), 1000)
+    }
+    return button
   }
 }
 
@@ -258,23 +293,39 @@ class TableWidget extends WidgetType {
 }
 
 /// Строки блока кода: фон на каждой, рамка — на первой и последней,
-/// иначе граница рисуется между строками.
+/// иначе граница рисуется между строками. Тело блока получает номер строки.
 function addCodeLines(ranges, doc, node, active) {
   const range = blockRange({ doc }, node)
   const first = doc.lineAt(range.from).number
   const last = doc.lineAt(Math.max(range.from, range.to - 1)).number
+  const body = codeBody(doc, node.node)
+  // Закрывающая ограда вне активной строки прячется вместе с переводом
+  // строки, и её пустая строка сливается с пустой строкой после блока.
+  // Красить её нечем: рамку блока рисует последняя строка тела.
+  const bareLast =
+    node.name === 'FencedCode' && !active && body && body.last < last ? last : -1
+  const lastStyled = bareLast < 0 ? last : body.last
   for (let n = first; n <= last; n++) {
-    const classes = ['mc-code']
+    if (n === bareLast) continue
+    const classes = ['mc-code', 'mc-code-block']
+    const attributes = {}
     if (active) classes.push('mc-code-active')
     if (n === first) classes.push('mc-code-first')
-    if (n === last) classes.push('mc-code-last')
+    if (n === lastStyled) classes.push('mc-code-last')
+    if (body && n >= body.first && n <= body.last)
+      attributes['data-num'] = String(n - body.first + 1)
+    // Ограда прячется вместе с переводом строки, и CM сливает её строку
+    // с первой строкой тела, теряя декорацию тела. Номер 1 ставим на обе:
+    // на слитой строке уцелеет одна из них, дубликата не будет.
+    else if (body && !active && node.name === 'FencedCode' && n === first)
+      attributes['data-num'] = '1'
     ranges.push({
       from: doc.line(n).from,
       to: doc.line(n).from,
-      deco: Decoration.line({ class: classes.join(' ') }),
+      deco: Decoration.line({ class: classes.join(' '), attributes }),
     })
   }
-  return { first, last }
+  return { first, last, body }
 }
 
 /// Ищет границы блока по дереву: от начала строки первого узла до конца строки последнего.
@@ -469,16 +520,22 @@ function buildDecorations({ state }) {
           case 'CodeInfo': {
             return
           }
-          case 'CodeBlock': {
-            const range = blockRange(state, node)
-            addCodeLines(ranges, doc, node, inRange(state, range.from, range.to))
-            return
-          }
+          case 'CodeBlock':
           case 'FencedCode': {
             const range = blockRange(state, node)
             const active = inRange(state, range.from, range.to)
-            const { first: firstLine, last: lastLine } = addCodeLines(ranges, doc, node, active)
-            if (!active) {
+            const { first: firstLine, last: lastLine, body } = addCodeLines(ranges, doc, node, active)
+            // Пока идёт IME, кнопка не пересобирается: замена DOM под курсором
+            // рвёт composition.
+            if (body && !composing) {
+              const line = doc.line(firstLine)
+              ranges.push({
+                from: line.from,
+                to: line.from,
+                deco: Decoration.widget({ widget: new CopyWidget(body.text), side: -1 }),
+              })
+            }
+            if (name === 'FencedCode' && !active) {
               // Ограда — служебная строка: убираем её целиком вместе с \n.
               const first = doc.line(firstLine)
               const last = doc.line(lastLine)

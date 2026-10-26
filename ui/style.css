@@ -83,14 +83,6 @@ body {
   padding: 3px 0;
 }
 
-/* Курсор рисует drawSelection(): свой элемент `.cm-cursor`, а не нативный
-   caret. Без этого он остаётся чёрным и в тёмной теме исчезает. */
-.cm-editor .cm-cursor,
-.cm-editor .cm-dropCursor {
-  border-left-color: var(--mc-fg);
-  border-left-width: 2px;
-}
-
 /* ─── Заголовки ─────────────────────────────────────────────────────────── */
 .cm-line.mc-h1 {
   font-size: 1.875em;
@@ -311,6 +303,8 @@ body {
   font-style: normal;
 }
 
+/* Выделение и курсор — нативные: WebKit красит их из `::selection` и
+   `caret-color`, а `drawSelection()` рисовал бы поверх своё. */
 ::selection {
   background: var(--mc-selection);
   color: var(--mc-selection-fg);

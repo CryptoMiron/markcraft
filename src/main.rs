@@ -62,6 +62,9 @@ impl App {
     /// Отдаёт странице палитру и размер текста. Вызывается и при смене темы.
     fn apply_theme(&self) {
         let theme = self.theme.borrow();
+        if std::env::var_os("MC_DEBUG").is_some() {
+            eprintln!("css: {}", theme.css());
+        }
         let css = format!(
             "{}\n.cm-editor .cm-scroller{{font-size:{}px}}\n.cm-editor .cm-content{{max-width:min({}px, 100%)}}",
             theme.css(),

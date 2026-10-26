@@ -81,6 +81,22 @@ fn luminance(color: &str) -> Option<f64> {
     Some(0.299 * channel(0)? + 0.587 * channel(1)? + 0.114 * channel(2)?)
 }
 
+/// Сумма разниц каналов: грубая, но достаточная мера «видно или нет».
+fn contrast(a: &str, b: &str) -> i32 {
+    let parse = |c: &str| -> Option<(i32, i32, i32)> {
+        let hex = c.strip_prefix('#')?;
+        if hex.len() != 6 {
+            return None;
+        }
+        let ch = |i: usize| i32::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok();
+        Some((ch(0)?, ch(1)?, ch(2)?))
+    };
+    match (parse(a), parse(b)) {
+        (Some(a), Some(b)) => (a.0 - b.0).abs() + (a.1 - b.1).abs() + (a.2 - b.2).abs(),
+        _ => 0,
+    }
+}
+
 /// Смешивает цвет с текстом: панель кода не должна сливаться с фоном.
 fn blend(base: &str, other: &str, amount: f64) -> String {
     let parse = |c: &str| -> Option<(f64, f64, f64)> {
@@ -206,6 +222,26 @@ impl Theme {
         )
     }
 
+    /// Цвет выделения, подмешанный к тексту.
+    ///
+    /// Тема Omarchy задаёт `selection` под свой фон окна, а не под панель кода:
+    /// в tokyo-night это `#292e42` при панели `#24283b` — разницы не видно.
+    /// Поэтому сдвигаем выделение к цвету текста, пока оно не станет заметным.
+    fn selection_css(&self) -> String {
+        let mut amount = 0.0;
+        let mut color = self.selection.clone();
+        // Шаг 0.1, предел 0.7. Порог 140 из 765: при 45 разница формально есть,
+        // но глазом не видна — на этом и потеряли выделение в первый раз.
+        while amount < 0.7
+            && (contrast(&color, &self.background) < 140
+                || contrast(&color, &self.code_background) < 140)
+        {
+            amount += 0.1;
+            color = blend(&self.selection, &self.foreground, amount);
+        }
+        color
+    }
+
     /// CSS-переменные для страницы. Одна строка — один слой правды о цвете.
     pub fn css(&self) -> String {
         let border = blend(&self.background, &self.foreground, 0.2);
@@ -225,7 +261,7 @@ impl Theme {
             border,
             inline_bg,
             self.code_background,
-            self.selection,
+            self.selection_css(),
             self.selection_foreground,
             table_head,
             self.token_css(),
@@ -447,6 +483,47 @@ bright_foreground = "#c0caf5"
         assert_eq!(at(1.0).column(), 700.0);
         assert_eq!(at(1.25).column(), 875.0);
         assert_eq!(at(0.5).column(), 350.0);
+    }
+
+    #[test]
+    fn selection_is_visible_on_page_and_on_code() {
+        for (name, colors) in [
+            (
+                "tokyo-night",
+                "mode = \"dark\"\nbackground = \"#1a1b26\"\nforeground = \"#a9b1d6\"\n\
+selection = \"#292e42\"\nlighter_background = \"#24283b\"\n",
+            ),
+            (
+                "catppuccin-latte",
+                "mode = \"light\"\nbackground = \"#eff1f5\"\nforeground = \"#4c4f69\"\n\
+selection = \"#ccd0da\"\n",
+            ),
+        ] {
+            let mut theme = Theme::default();
+            theme.apply_colors(colors);
+            let selection = theme.selection_css();
+            assert!(
+                contrast(&selection, &theme.background) >= 140,
+                "{name}: выделение {selection} сливается с фоном {}",
+                theme.background
+            );
+            assert!(
+                contrast(&selection, &theme.code_background) >= 140,
+                "{name}: выделение {selection} сливается с панелью кода {}",
+                theme.code_background
+            );
+        }
+    }
+
+    #[test]
+    fn selection_stays_close_to_theme_colour() {
+        // Если в теме выделение уже контрастное, его не трогаем.
+        let mut theme = Theme::default();
+        theme.apply_colors(
+            "mode = \"dark\"\nbackground = \"#000000\"\nforeground = \"#ffffff\"\n\
+selection = \"#4466aa\"\n",
+        );
+        assert_eq!(theme.selection_css(), "#4466aa");
     }
 
     #[test]

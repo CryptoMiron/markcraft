@@ -1,12 +1,5 @@
 import { EditorState, StateField, StateEffect, Transaction } from '@codemirror/state'
-import {
-  EditorView,
-  Decoration,
-  WidgetType,
-  drawSelection,
-  keymap,
-  placeholder,
-} from '@codemirror/view'
+import { EditorView, Decoration, WidgetType, keymap, placeholder } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import {
@@ -83,10 +76,18 @@ const codeHighlight = syntaxHighlighting(
     { tag: tags.meta, class: 'tok-meta' },
   ]),
 )
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  undo,
+  redo,
+} from '@codemirror/commands'
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
 import MarkdownIt from 'markdown-it'
 import { linkHrefAt } from './links.js'
+import { actionFor } from './hotkeys.js'
 import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.js'
 
 // ─── Мост в Rust ────────────────────────────────────────────────────────────
@@ -578,6 +579,60 @@ const serviceKeys = [
   { key: 'F1', run: () => (send('help'), true) },
 ]
 
+// ─── Хоткеи независимо от раскладки ─────────────────────────────────────────
+// На русской раскладке Ctrl+S даёт `event.key === 'ы'`, и совпадения с 's' нет.
+// Поэтому служебные сочетания разбираем по `event.code` — это физическая
+// клавиша, она одинакова при любой раскладке.
+
+const runAction = (action, view) => {
+  switch (action) {
+    case 'save':
+    case 'saveAs':
+      send(action, { text: view.state.doc.toString() })
+      return true
+    case 'open':
+      send('open')
+      return true
+    case 'newWindow':
+      send('newWindow')
+      return true
+    case 'paste':
+      send('paste')
+      return true
+    case 'bold':
+      return wrap('**')(view)
+    case 'italic':
+      return wrap('*')(view)
+    case 'strike':
+      return wrap('~~')(view)
+    case 'link':
+      return makeLink(view)
+    case 'undo':
+      return undo(view)
+    case 'redo':
+      return redo(view)
+    case 'find':
+    case 'replace':
+      return openSearchPanel(view)
+    case 'copyHtml':
+      return copyAsHtml(view)
+    case 'help':
+      send('help')
+      return true
+    case 'zoomIn':
+      send('zoom', { step: 1 })
+      return true
+    case 'zoomOut':
+      send('zoom', { step: -1 })
+      return true
+    case 'zoomReset':
+      send('zoom', { step: 0 })
+      return true
+    default:
+      return false
+  }
+}
+
 // ─── Правка ─────────────────────────────────────────────────────────────────
 // Правила лежат в editing.js и проверяются тестами; здесь только их
 // применение к документу.
@@ -666,7 +721,6 @@ const view = new EditorView({
     doc: '',
     extensions: [
       history(),
-      drawSelection(),
       EditorView.lineWrapping,
       markdown({ base: markdownLanguage, codeLanguages }),
       codeHighlight,
@@ -715,41 +769,12 @@ const view = new EditorView({
           return true
         },
         keydown(event) {
-          if (!event.ctrlKey) return false
-          const key = event.key.toLowerCase()
-          if (key === 's') {
-            event.preventDefault()
-            send(event.shiftKey ? 'saveAs' : 'save', { text: view.state.doc.toString() })
-            return true
-          }
-          if (key === 'o') {
-            event.preventDefault()
-            send('open')
-            return true
-          }
-          if (key === '=' || key === '+') {
-            event.preventDefault()
-            send('zoom', { step: 1 })
-            return true
-          }
-          if (key === '-') {
-            event.preventDefault()
-            send('zoom', { step: -1 })
-            return true
-          }
-          if (key === '0') {
-            event.preventDefault()
-            send('zoom', { step: 0 })
-            return true
-          }
-          if (key === 'v') {
-            // Буфер читает Rust через GTK: WebKit под Wayland синтетический
-            // Ctrl+V не обрабатывает, а системный буфер нужен рабочим.
-            event.preventDefault()
-            send('paste')
-            return true
-          }
-          return false
+          // Поля панели поиска не перехватываем: там Ctrl+V и Ctrl+A свои.
+          if (event.target.closest?.('.cm-panels')) return false
+          const action = actionFor(event)
+          if (!action || !runAction(action, view)) return false
+          event.preventDefault()
+          return true
         },
       }),
     ],

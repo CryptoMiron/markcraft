@@ -7,12 +7,14 @@
 export function actionFor(event) {
   if (!event.ctrlKey && !event.metaKey) return null
 
+  // Сначала физическая клавиша: на русской раскладке Ctrl+S даёт key='ы',
+  // и только `code` остаётся латинским. Если код незнакомый или пустой
+  // (программные события, некоторые экранные клавиатуры), пробуем `key`.
   const shift = !!event.shiftKey
+  return byCode(event.code, shift) ?? byCode(codeFromKey(event.key), shift)
+}
 
-  // `code` пустой у программных событий и части экранных клавиатур —
-  // тогда остаётся латинский `key`, если он есть.
-  const code = event.code || codeFromKey(event.key)
-
+function byCode(code, shift = false) {
   switch (code) {
     case 'KeyS':
       return shift ? 'saveAs' : 'save'

@@ -75,3 +75,22 @@ test('если code пустой, берётся латинский key', () => 
   // Кириллица без code не угадывается: лучше не сработать, чем сработать не то.
   expect(actionFor({ code: '', key: 'ы', ctrlKey: true })).toBeNull()
 })
+
+test('незнакомый code не мешает разобрать латинский key', () => {
+  // Некоторые инструменты ввода присылают мусор в code, но верный key.
+  expect(actionFor({ code: 'Escape', key: 's', ctrlKey: true })).toBe('save')
+  expect(actionFor({ code: 'Unidentified', key: 'b', ctrlKey: true })).toBe('bold')
+  expect(actionFor({ code: '', key: 'z', ctrlKey: true })).toBe('undo')
+})
+
+test('физическая клавиша важнее символа', () => {
+  // Русская раскладка: code латинский, key кириллический.
+  expect(actionFor({ code: 'KeyS', key: 'ы', ctrlKey: true })).toBe('save')
+  // Если code и key расходятся намеренно, верим code.
+  expect(actionFor({ code: 'KeyS', key: 'b', ctrlKey: true })).toBe('save')
+})
+
+test('Shift учитывается при обоих путях', () => {
+  expect(actionFor({ code: 'Escape', key: 'z', ctrlKey: true, shiftKey: true })).toBe('redo')
+  expect(actionFor({ code: 'KeyZ', key: 'Я', ctrlKey: true, shiftKey: true })).toBe('redo')
+})

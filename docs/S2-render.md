@@ -45,7 +45,7 @@
 ```sh
 ./bin/bundle
 cargo build --release
-./target/release/markcraft fixtures/gfm-full.md   # сверить глазами с Inkdown
+./target/release/markcraft fixtures/gfm-full.md   # посмотреть глазами: блоки, отступы, подсветка
 bin/check                                          # fmt, clippy, cargo test, bun test, свежесть built.html
 ```
 

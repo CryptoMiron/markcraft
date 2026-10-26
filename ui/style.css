@@ -198,16 +198,17 @@ body {
   padding-right: 30px;
 }
 
-/* Номер вне потока текста: не участвует в переносе и не попадает в выделение. */
+/* Номер вне потока текста: не участвует в переносе и не попадает в выделение.
+   top повторяет padding-top строки: без него номер висит над текстом. */
 .cm-line.mc-code[data-num]::before {
   content: attr(data-num);
   position: absolute;
-  top: 0;
+  top: 3px;
   left: 8px;
   width: 34px;
   text-align: right;
-  color: var(--mc-muted);
-  opacity: 0.5;
+  color: var(--mc-code-fg);
+  opacity: 0.55;
   pointer-events: none;
   user-select: none;
 }

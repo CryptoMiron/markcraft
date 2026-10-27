@@ -13,6 +13,9 @@ pub struct Theme {
     pub accent: String,
     /// Цвет выделения из `colors.toml` — фон выделенного текста и поиска.
     pub selection: String,
+    /// Цвет текста на выделении: как в Omawrite — `selection_foreground`,
+    /// затем `bright_foreground`, затем обычный `foreground`.
+    pub selection_foreground: String,
     pub muted: String,
     pub code_background: String,
     /// Что просит рабочий стол (GNOME `text-scaling-factor`), 12 px = 1.0.
@@ -31,6 +34,7 @@ impl Default for Theme {
             foreground: "#eeeeee".into(),
             accent: "#7aa2f7".into(),
             selection: "#2f3549".into(),
+            selection_foreground: "#eeeeee".into(),
             muted: "#909191".into(),
             code_background: "#1c1c1c".into(),
             text_scale: 1.0,
@@ -179,6 +183,21 @@ impl Theme {
         if let Some(c) = map.get("selection").filter(|c| luminance(c).is_some()) {
             self.selection = c.clone();
         }
+        // Порядок как в Omawrite: обычный текст, затем яркий, затем специальный
+        // цвет выделения — последний найденный побеждает.
+        self.selection_foreground = self.foreground.clone();
+        if let Some(c) = map
+            .get("bright_foreground")
+            .filter(|c| luminance(c).is_some())
+        {
+            self.selection_foreground = c.clone();
+        }
+        if let Some(c) = map
+            .get("selection_foreground")
+            .filter(|c| luminance(c).is_some())
+        {
+            self.selection_foreground = c.clone();
+        }
 
         // Панель кода: lighter_background темы, иначе лёгкая примесь текста.
         // Примесь, а не осветление: на чисто чёрном фоне осветление не видно.
@@ -247,7 +266,7 @@ impl Theme {
         format!(
             ":root{{color-scheme:{};--mc-bg:{};--mc-fg:{};--mc-accent:{};\
 --mc-muted:{};--mc-border:{};--mc-inline-bg:{};--mc-code-bg:{};\
---mc-selection:{};--mc-search:{};--mc-table-head:{};{}}}",
+--mc-selection:{};--mc-selection-fg:{};--mc-search:{};--mc-table-head:{};{}}}",
             if self.dark { "dark" } else { "light" },
             self.background,
             self.foreground,
@@ -257,6 +276,7 @@ impl Theme {
             inline_bg,
             self.code_background,
             self.selection,
+            self.selection_foreground,
             self.search_css(),
             table_head,
             self.token_css(),
@@ -397,6 +417,18 @@ bright_foreground = "#c0caf5"
         assert_eq!(theme.accent, "#7aa2f7");
         assert_eq!(theme.code_background, "#24283b");
         assert_eq!(theme.selection, "#292e42");
+        assert_eq!(theme.selection_foreground, "#c0caf5");
+    }
+
+    #[test]
+    fn selection_text_colour_follows_theme() {
+        let mut theme = Theme::default();
+        theme.apply_colors(TOKYO);
+        assert_eq!(theme.selection_foreground, "#c0caf5");
+        // Без специальных ключей выделенный текст остаётся обычным текстом.
+        let mut plain = Theme::default();
+        plain.apply_colors("background = \"#000000\"\nforeground = \"#ffffff\"\n");
+        assert_eq!(plain.selection_foreground, "#ffffff");
     }
 
     #[test]
@@ -405,8 +437,7 @@ bright_foreground = "#c0caf5"
         theme.apply_colors(TOKYO);
         let css = theme.css();
         assert!(css.contains("--mc-selection:#292e42"), "{css}");
-        // Цвет текста на выделении не задаём: ::selection красит только фон.
-        assert!(!css.contains("--mc-selection-fg"), "{css}");
+        assert!(css.contains("--mc-selection-fg:#c0caf5"), "{css}");
         // Поиск остаётся на подмешанном цвете, а не на сыром выделении темы.
         assert!(css.contains("--mc-search:#"), "{css}");
     }
@@ -577,6 +608,7 @@ selection = \"#4466aa\"\n",
             "--mc-inline-bg",
             "--mc-code-bg",
             "--mc-selection",
+            "--mc-selection-fg",
             "--mc-search",
             "--mc-table-head",
         ] {

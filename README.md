@@ -21,7 +21,7 @@ MarkCraft is a Markdown editor built for Omarchy. It opens one file in a native 
 
 *Live GFM preview, the Omarchy palette, code highlighting and the status bar.*
 
-**Contents:** [Example](#example) · [Quick start](#quick-start) · [Built for Omarchy](#built-for-omarchy) · [Keys](#keys) · [Architecture](#architecture) · [Environment](#environment-variables-and-state) · [Tests](#tests) · [Known limits](#known-limits) · [Documentation](#documentation) · [License](#license)
+**Contents:** [Example](#example) · [Install](#install) · [Built for Omarchy](#built-for-omarchy) · [Keys](#keys) · [Architecture](#architecture) · [Environment](#environment-variables-and-state) · [Tests](#tests) · [Known limits](#known-limits) · [Documentation](#documentation) · [License](#license)
 
 ---
 
@@ -51,9 +51,21 @@ MarkCraft renders this live, with Markdown markers visible only in the line you 
 
 ---
 
-## Quick start
+## Install
 
-MarkCraft needs Linux, GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` at runtime. On Omarchy or Arch:
+MarkCraft needs Linux, GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` at runtime. On Omarchy or Arch, install it with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/CryptoMiron/markcraft/master/bin/install | bash
+```
+
+The script asks for your sudo password, installs the missing build tools, builds an Arch package from the latest `master` and installs it with `pacman`. After that `pacman -Q markcraft` finds the package, the launcher entry and icon are in place, and `sudo pacman -R markcraft` removes everything. Run the same command again to update.
+
+The package is built from source, so the first install needs network access and a few minutes. Rust, Bun and Python are installed as build dependencies; GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` come with the package. The script is [`bin/install`](bin/install): read it before piping it into a shell.
+
+### From source
+
+To run a checkout without installing:
 
 ```sh
 sudo pacman -S --needed base-devel rust gtk3 webkit2gtk-4.1 xdg-desktop-portal
@@ -82,10 +94,9 @@ Run the full check:
 ./bin/check
 ```
 
-Build and install the Arch package:
+To build and install the package from a checkout without the script:
 
 ```sh
-sudo pacman -S --needed bun python3
 cd pkgbuild
 makepkg -fsi
 ```

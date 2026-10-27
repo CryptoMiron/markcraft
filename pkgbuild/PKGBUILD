@@ -8,7 +8,7 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/CryptoMiron/markcraft'
 license=('MIT')
 depends=('gtk3' 'webkit2gtk-4.1' 'xdg-desktop-portal')
-makedepends=('rust' 'bun')
+makedepends=('rust' 'bun' 'python')
 source=()
 sha256sums=()
 

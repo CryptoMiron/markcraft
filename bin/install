@@ -1,0 +1,24 @@
+#!/bin/bash
+# Ставит MarkCraft пакетом Arch из последнего master: сборка через makepkg, установка через pacman.
+set -euo pipefail
+
+command -v pacman >/dev/null || { echo "MarkCraft ставится только на Arch и Omarchy." >&2; exit 1; }
+
+missing=()
+command -v git >/dev/null || missing+=(git)
+if ! command -v makepkg >/dev/null || ! command -v fakeroot >/dev/null || ! command -v cc >/dev/null; then
+  missing+=(base-devel)
+fi
+if ((${#missing[@]})); then
+  sudo pacman -S --needed --noconfirm "${missing[@]}"
+fi
+
+# Собираем в кеше, а не в /tmp: на Arch /tmp часто tmpfs, а сборке Rust нужно место.
+build=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/markcraft-install.XXXXXX")
+trap 'rm -rf "$build"' EXIT
+
+git clone --depth=1 https://github.com/CryptoMiron/markcraft.git "$build/markcraft"
+cd "$build/markcraft/pkgbuild"
+# shortcut: версия остаётся из PKGBUILD (0.1.0), обновление — пересборкой; в AUR версию будет вести pkgver().
+makepkg -si --noconfirm
+echo "Готово: MarkCraft установлен, запуск — markcraft."

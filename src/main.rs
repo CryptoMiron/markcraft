@@ -698,7 +698,16 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
     window.add(&webview);
     webview.load_html(UI_HTML, base.as_deref());
     window.show_all();
+    // Новое окно должно не только появиться, но и получить фокус: иначе
+    // первый клик по нему уходит на активацию окна, а не в редактор, и
+    // выделение мышью сбрасывается.
+    window.present();
     webview.grab_focus();
+    let focus = webview.clone();
+    window.connect_focus_in_event(move |_, _| {
+        focus.grab_focus();
+        gtk::glib::Propagation::Proceed
+    });
 }
 
 fn main() {

@@ -45,8 +45,60 @@ body {
   color: var(--mc-fg);
 }
 
+body {
+  display: flex;
+  flex-direction: column;
+}
+
 #editor {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Статусбар: путь слева, счётчики справа. TUI-настроение — моноширинный
+   шрифт мельче текста и приглушённый цвет. */
+#status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-height: 24px;
+  padding: 0 12px;
+  border-top: 1px solid var(--mc-border);
+  background: var(--mc-inline-bg);
+  color: var(--mc-muted);
+  font-family: ui-monospace, 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#status-path {
+  display: flex;
+  min-width: 0;
+}
+
+/* Каталог ужимается, имя файла остаётся видимым. */
+#status-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#status-file {
+  flex: none;
+}
+
+#status-stats {
+  flex: none;
+  margin-left: auto;
+  opacity: 0.8;
+}
+
+@media (max-width: 520px) {
+  #status-stats {
+    display: none;
+  }
 }
 
 .cm-editor {

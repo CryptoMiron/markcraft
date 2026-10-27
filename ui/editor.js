@@ -86,7 +86,7 @@ import {
 } from '@codemirror/commands'
 import { search, searchKeymap, openSearchPanel } from '@codemirror/search'
 import MarkdownIt from 'markdown-it'
-import { linkHrefAt, opensLinkOn } from './links.js'
+import { linkHrefAt, opensLinkOn, anchorLine } from './links.js'
 import { findFrontmatter } from './frontmatter.js'
 import { codeBody } from './code-block.js'
 import { actionFor } from './hotkeys.js'
@@ -98,6 +98,29 @@ const send = (type, extra = {}) =>
 
 // Словарь вставлен Rust до бандла: к созданию EditorView он уже на месте.
 const t = (key) => window.mcI18n?.[key] ?? key
+
+// ─── Статусбар ──────────────────────────────────────────────────────────────
+const statusPath = document.getElementById('status-path')
+const statusDir = document.getElementById('status-dir')
+const statusFile = document.getElementById('status-file')
+const statusStats = document.getElementById('status-stats')
+
+const setPath = (path) => {
+  const cut = path ? path.lastIndexOf('/') + 1 : 0
+  statusDir.textContent = path ? path.slice(0, cut) : ''
+  statusFile.textContent = path ? path.slice(cut) : t('file.untitled')
+  statusPath.title = path || ''
+}
+
+/// Счётчики по всему тексту. shortcut: пересчёт на каждую правку; до сотен КБ
+/// это дешевле дебаунса, при больших файлах — считать по таймеру.
+function renderStats(state) {
+  const text = state.doc.toString()
+  const words = text.match(/\S+/g)?.length ?? 0
+  const n = (value) => value.toLocaleString(document.documentElement.lang)
+  statusStats.textContent =
+    `${t('status.words')} ${n(words)} · ${t('status.chars')} ${n(state.doc.length)} · ${t('status.lines')} ${n(state.doc.lines)}`
+}
 
 // ─── Скрытие разметки ───────────────────────────────────────────────────────
 // Правило живое-превью: маркер виден только там, где стоит курсор. Всё
@@ -837,6 +860,7 @@ const view = new EditorView({
       ]),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return
+        renderStats(update.state)
         if (window.mc.quiet) return
         send('dirty', { text: update.state.doc.toString() })
       }),
@@ -866,6 +890,17 @@ const view = new EditorView({
           const href = linkHrefAt(view.state.doc.toString(), pos)
           if (!href) return false
           event.preventDefault()
+          if (href.startsWith('#')) {
+            const line = anchorLine(view.state.doc.toString(), href)
+            if (line !== null) {
+              view.dispatch({
+                selection: { anchor: view.state.doc.line(line).from },
+                scrollIntoView: true,
+              })
+            }
+            view.focus()
+            return true
+          }
           send('openUrl', { url: href })
           return true
         },
@@ -885,7 +920,8 @@ const view = new EditorView({
 // Вызовы из Rust.
 window.mc = {
   quiet: false,
-  loaded({ text }) {
+  loaded({ text, path }) {
+    setPath(path)
     this.quiet = true
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
@@ -901,6 +937,10 @@ window.mc = {
   insert({ text }) {
     view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: 'input' })
   },
+  /// Только путь: Save As и выбор имени не должны трогать текст и курсор.
+  path(path) {
+    setPath(path)
+  },
   /// Палитра и размер текста приходят из Omarchy одной строкой CSS.
   theme(css) {
     let style = document.getElementById('mc-theme')
@@ -914,6 +954,7 @@ window.mc = {
 }
 
 view.focus()
+renderStats(view.state)
 
 // Одно активное выделение на приложение: при потере фокуса окна снимаем
 // выделение, чтобы старое не мешало выделять в другом окне.

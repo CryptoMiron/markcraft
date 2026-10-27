@@ -111,6 +111,7 @@ impl App {
         let payload = serde_json::json!({
             "text": self.doc.borrow().text,
             "name": self.doc.borrow().name(),
+            "path": self.status_path(),
         });
         self.webview.evaluate_javascript(
             &format!("window.mc.loaded({payload})"),
@@ -122,12 +123,94 @@ impl App {
         self.refresh_title();
     }
 
+    /// Путь для статусбара: абсолютный, домашний каталог сокращён до `~`.
+    fn status_path(&self) -> Option<String> {
+        let doc = self.doc.borrow();
+        let path = doc.path()?;
+        let absolute = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
+            && let Ok(rest) = absolute.strip_prefix(&home)
+        {
+            return Some(format!("~/{}", rest.display()));
+        }
+        Some(absolute.display().to_string())
+    }
+
+    /// Обновляет только путь в статусбаре: текст и курсор не трогаем.
+    fn refresh_path(&self) {
+        let path = self.status_path();
+        self.webview.evaluate_javascript(
+            &format!("window.mc && window.mc.path({})", serde_json::json!(path)),
+            None,
+            None,
+            None::<&gtk::gio::Cancellable>,
+            |_| {},
+        );
+    }
+
+    /// Реестр «путь → окно» должен совпадать с тем, что реально открыто.
+    fn remember_path(&self, path: &Path) {
+        let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let mut open = self.open_files.borrow_mut();
+        open.retain(|(_, window)| window != &self.window);
+        open.retain(|(other, _)| other != &key);
+        open.push((key, self.window.clone()));
+    }
+
+    /// Новый путь документа: реестр окон и статусбар.
+    fn adopt_path(&self, path: PathBuf) {
+        self.doc.borrow_mut().set_path(path.clone());
+        self.remember_path(&path);
+        self.refresh_path();
+    }
+
+    /// Ctrl+клик: относительный файл — в MarkCraft, остальное — системе.
+    fn open_link(self: &Rc<Self>, href: &str) {
+        let base = self
+            .doc
+            .borrow()
+            .path()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .or_else(|| std::env::current_dir().ok());
+        match link_target(base.as_deref(), href) {
+            Link::Open(path) if is_doc(&path) => {
+                let key = path.canonicalize().unwrap_or(path);
+                let current = self.doc.borrow().path().and_then(|p| p.canonicalize().ok());
+                if current.as_ref() == Some(&key) {
+                    return;
+                }
+                let open = self.open_files.borrow();
+                let existing = open
+                    .iter()
+                    .find(|(p, _)| p == &key)
+                    .map(|(_, window)| window.clone());
+                drop(open);
+                if let Some(window) = existing {
+                    window.present();
+                    return;
+                }
+                build_window(&self.app, Some(key), &self.open_files);
+            }
+            Link::Open(path) => {
+                let uri = gtk::gio::File::for_path(&path).uri();
+                let _ = gtk::show_uri_on_window(Some(&self.window), uri.as_str(), 0);
+            }
+            Link::Missing(path) => {
+                let text = tf("error.not_found", &[("path", &path.display().to_string())]);
+                error(&self.window, &text);
+            }
+            Link::External => {
+                let _ = gtk::show_uri_on_window(Some(&self.window), href, 0);
+            }
+        }
+    }
+
     /// Первый показ документа после загрузки страницы.
     fn start(&self) {
         self.apply_theme();
         if let Some(draft) = self.restore.borrow_mut().take() {
             if let Some(path) = &draft.path {
-                self.doc.borrow_mut().set_path(path.clone());
+                self.adopt_path(path.clone());
             }
             self.doc.borrow_mut().set_text(&draft.text);
             self.recovered.set(true);
@@ -201,7 +284,7 @@ impl App {
             else {
                 return false;
             };
-            self.doc.borrow_mut().set_path(with_md(path));
+            self.adopt_path(with_md(path));
         }
         // Результат в переменную: borrow_mut в `if let` держится всю ветку, а внутри
         // неё открывается модальный диалог с вложенным циклом событий — таймер
@@ -228,7 +311,7 @@ impl App {
         let Some(path) = choose(&self.window, FileChooserAction::Save, t("file.save_as")) else {
             return;
         };
-        self.doc.borrow_mut().set_path(with_md(path));
+        self.adopt_path(with_md(path));
         self.save();
     }
 
@@ -242,6 +325,7 @@ impl App {
                     .and_then(|p| p.parent().map(|d| d.to_path_buf()))
                     == path.parent().map(|d| d.to_path_buf());
                 *self.doc.borrow_mut() = doc;
+                self.remember_path(path);
                 self.gone_reported.set(false);
                 // Всё, что было в редакторе, заменено диском: несохранённого нет,
                 // и черновик от прежнего буфера больше не нужен.
@@ -412,6 +496,43 @@ fn with_md(path: PathBuf) -> PathBuf {
     } else {
         path
     }
+}
+
+enum Link {
+    Open(PathBuf),
+    Missing(PathBuf),
+    External,
+}
+
+/// Куда ведёт Ctrl+клик: локальный файл, отсутствующий файл или внешний адрес.
+fn link_target(base: Option<&Path>, href: &str) -> Link {
+    let raw = href.split('#').next().unwrap_or_default();
+    if raw.is_empty()
+        || raw.contains("://")
+        || raw.starts_with("mailto:")
+        || raw.starts_with("tel:")
+    {
+        return Link::External;
+    }
+    let path = Path::new(raw);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else if let Some(base) = base {
+        base.join(path)
+    } else {
+        path.to_path_buf()
+    };
+    if path.exists() {
+        Link::Open(path)
+    } else {
+        Link::Missing(path)
+    }
+}
+
+fn is_doc(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown" | "txt"))
 }
 
 fn choose(parent: &ApplicationWindow, action: FileChooserAction, title: &str) -> Option<PathBuf> {
@@ -612,7 +733,7 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
             "openUrl" => {
                 let url = message["url"].as_str().unwrap_or_default();
                 if !url.is_empty() {
-                    let _ = gtk::show_uri_on_window(Some(&sender.window), url, 0);
+                    sender.open_link(url);
                 }
             }
             _ => {}
@@ -746,4 +867,48 @@ fn main() {
     let mut argv: Vec<String> = vec!["markcraft".to_owned()];
     argv.extend(files.iter().map(|p| p.to_string_lossy().into_owned()));
     app.run_with_args(&argv);
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn relative_links_resolve_against_the_document() {
+        let dir = std::env::temp_dir().join(format!("markcraft-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("docs")).unwrap();
+        fs::write(dir.join("docs/SPEC.md"), "# spec\n").unwrap();
+
+        match link_target(Some(&dir), "docs/SPEC.md") {
+            Link::Open(path) => assert_eq!(path, dir.join("docs/SPEC.md")),
+            _ => panic!("относительная ссылка не нашла файл"),
+        }
+        assert!(matches!(
+            link_target(Some(&dir), "docs/SPEC.md#r4"),
+            Link::Open(_)
+        ));
+        assert!(matches!(link_target(Some(&dir), "docs"), Link::Open(_)));
+        assert!(matches!(
+            link_target(Some(&dir), "docs/missing.md"),
+            Link::Missing(_)
+        ));
+        assert!(matches!(
+            link_target(Some(&dir), "https://example.com"),
+            Link::External
+        ));
+        assert!(matches!(link_target(Some(&dir), "#r4"), Link::External));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_text_documents_open_in_markcraft() {
+        assert!(is_doc(Path::new("README.md")));
+        assert!(is_doc(Path::new("SKILL.MD")));
+        assert!(is_doc(Path::new("notes.txt")));
+        assert!(!is_doc(Path::new("pic.png")));
+        assert!(!is_doc(Path::new("src/main.rs")));
+    }
 }

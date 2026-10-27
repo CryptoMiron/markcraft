@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import { linkHrefAt, opensLinkOn } from './links.js'
+import { linkHrefAt, opensLinkOn, anchorLine } from './links.js'
 
 const doc = [
   'Абзац [ссылка](https://example.com/a "t") и ещё.',
@@ -56,4 +56,14 @@ test('Cmd+клик открывает ссылку', () => {
 test('средняя и правая кнопки ссылку не открывают', () => {
   expect(opensLinkOn({ button: 1, ctrlKey: true })).toBe(false)
   expect(opensLinkOn({ button: 2, ctrlKey: true })).toBe(false)
+})
+
+// ─── Якоря ──────────────────────────────────────────────────────────────────
+
+test('якорь ведёт к заголовку', () => {
+  const doc = ['# Введение', '', '## `npm install`', '', '#### Хвост ###'].join('\n')
+  expect(anchorLine(doc, '#введение')).toBe(1)
+  expect(anchorLine(doc, '#npm-install')).toBe(3)
+  expect(anchorLine(doc, '#хвост')).toBe(5)
+  expect(anchorLine(doc, '#нет-такого')).toBeNull()
 })

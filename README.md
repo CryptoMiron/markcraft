@@ -53,7 +53,24 @@ MarkCraft renders this live, with Markdown markers visible only in the line you 
 
 ## Install
 
-MarkCraft needs Linux, GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` at runtime. On Omarchy or Arch, install it with one command:
+MarkCraft needs Linux, GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` at runtime. On Omarchy or Arch there are two ways to install it.
+
+### Release package
+
+Download the package and `SHA256SUMS` from [Releases](https://github.com/CryptoMiron/markcraft/releases), verify the checksum and install:
+
+```sh
+curl -fLO https://github.com/CryptoMiron/markcraft/releases/download/v0.1.0/markcraft-0.1.0-1-x86_64.pkg.tar.zst
+curl -fLO https://github.com/CryptoMiron/markcraft/releases/download/v0.1.0/SHA256SUMS
+sha256sum -c SHA256SUMS
+sudo pacman -U markcraft-0.1.0-1-x86_64.pkg.tar.zst
+```
+
+The package contains the binary, the `.desktop` entry, the icon and the license. It is unsigned, so the checksum is the integrity check. The release asset is `x86_64`; on `aarch64` use the source install below.
+
+### One command from source
+
+Builds the latest `master` and installs it as a pacman package:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/CryptoMiron/markcraft/master/bin/install | bash
@@ -63,7 +80,7 @@ The script asks for your sudo password, installs the missing build tools, builds
 
 The package is built from source, so the first install needs network access and a few minutes. Rust, Bun and Python are installed as build dependencies; GTK3, WebKitGTK 4.1 and `xdg-desktop-portal` come with the package. The script is [`bin/install`](bin/install): read it before piping it into a shell.
 
-### From source
+### Run a checkout
 
 To run a checkout without installing:
 

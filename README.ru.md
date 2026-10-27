@@ -53,7 +53,24 @@ MarkCraft рисует это на лету, а маркеры Markdown видн
 
 ## Установка
 
-MarkCraft работает на Linux и требует GTK3, WebKitGTK 4.1 и `xdg-desktop-portal`. На Omarchy или Arch он ставится одной командой:
+MarkCraft работает на Linux и требует GTK3, WebKitGTK 4.1 и `xdg-desktop-portal`. На Omarchy или Arch есть два способа установки.
+
+### Пакет из релиза
+
+Скачайте пакет и `SHA256SUMS` со [страницы релизов](https://github.com/CryptoMiron/markcraft/releases), проверьте сумму и установите:
+
+```sh
+curl -fLO https://github.com/CryptoMiron/markcraft/releases/download/v0.1.0/markcraft-0.1.0-1-x86_64.pkg.tar.zst
+curl -fLO https://github.com/CryptoMiron/markcraft/releases/download/v0.1.0/SHA256SUMS
+sha256sum -c SHA256SUMS
+sudo pacman -U markcraft-0.1.0-1-x86_64.pkg.tar.zst
+```
+
+В пакете бинарник, `.desktop`, иконка и лицензия. Пакет не подписан, поэтому целостность проверяется суммой. Файл в релизе собран для `x86_64`; на `aarch64` используйте установку из исходников.
+
+### Одна команда из исходников
+
+Соберёт последний `master` и поставит его пакетом:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/CryptoMiron/markcraft/master/bin/install | bash
@@ -63,7 +80,7 @@ curl -fsSL https://raw.githubusercontent.com/CryptoMiron/markcraft/master/bin/in
 
 Пакет собирается из исходников: для первой установки нужны сеть и несколько минут. Rust, Bun и Python придут как зависимости сборки, а GTK3, WebKitGTK 4.1 и `xdg-desktop-portal` — как зависимости пакета. Скрипт лежит в [`bin/install`](bin/install): прочитайте его перед запуском через `| bash`.
 
-### Из исходников
+### Запуск из чекаута
 
 Чтобы запустить чекаут без установки:
 

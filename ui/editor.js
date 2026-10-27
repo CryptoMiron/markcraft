@@ -911,26 +911,3 @@ window.mc = {
 }
 
 view.focus()
-
-// WebKitGTK под Wayland иногда двигает DOM-выделение, не сообщая об этом
-// CodeMirror (заметно во втором окне): состояние остаётся старым, и метка
-// выделения не рисуется. Подтягиваем такое выделение в состояние редактора.
-document.addEventListener('selectionchange', () => {
-  if (view.composing) return
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return
-  const anchorNode = selection.anchorNode
-  const focusNode = selection.focusNode
-  if (
-    !anchorNode ||
-    !focusNode ||
-    !view.contentDOM.contains(anchorNode) ||
-    !view.contentDOM.contains(focusNode)
-  )
-    return
-  const anchor = view.posAtDOM(anchorNode, selection.anchorOffset)
-  const head = view.posAtDOM(focusNode, selection.focusOffset)
-  const main = view.state.selection.main
-  if (anchor === main.anchor && head === main.head) return
-  view.dispatch({ selection: { anchor, head } })
-})

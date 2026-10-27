@@ -1,11 +1,11 @@
-# Maintainer: Miron <miron@example.com>
+# Maintainer: CryptoMiron
 
 pkgname=markcraft
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='Markdown editor for Omarchy: byte-exact files, Inkdown typography'
 arch=('x86_64' 'aarch64')
-url='https://github.com/miron/markcraft'
+url='https://github.com/CryptoMiron/markcraft'
 license=('MIT')
 depends=('gtk3' 'webkit2gtk-4.1' 'xdg-desktop-portal')
 makedepends=('rust' 'bun')

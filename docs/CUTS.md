@@ -36,6 +36,6 @@
 ## Записанные факты, чтобы не перепроверять
 
 - `QTextDocument::MarkdownDialectGitHub` в Qt 6.12 при round-trip теряет: курсив в заголовке, setext-разметку, выравнивание колонок таблицы, hard break, разделение сносок и сырого HTML. Поэтому QML `TextEdit.MarkdownText` и любой путь через `QTextDocument` запрещены инвариантом I2.
-- Inkdown — AGPL-3.0, код не копируется. Из него берутся только числа из `docs/TYPOGRAPHY.md`, которые являются фактами о вёрстке, а не кодом.
+- Inkdown — AGPL-3.0, код не копируется. Из него берутся только числа из `docs/TYPOGRAPHY.md`, которые являются фактами о вёрстке, а не кодом; производной работы нет, MIT в силе (DECISIONS, 2026-10-27).
 - **wry на Linux умеет только X11.** `wry 0.57.1 → webkitgtk/mod.rs::new_x11` принимает только `RawWindowHandle::Xlib`, фича `x11` включена по умолчанию, Wayland-рукла нет вовсе. Попытка `WebViewBuilder::new().build(&tao_window)` на Wayland падает с `Error::UnsupportedWindowHandle`. Следствие: оболочка — прямо на `gtk-rs` + `webkit2gtk-rs`, без wry/tao. Это меньше кода, а не больше, и Wayland нативный (`hyprctl clients` показывает `xwayland: false`).
 

@@ -267,4 +267,6 @@ Before closing a release, open every fixture and save it without edits; `cmp` mu
 
 MIT. See [`LICENSE`](LICENSE).
 
+Layout numbers were measured from Inkdown (AGPL-3.0), but no code was copied: MarkCraft is an independent CodeMirror 6 implementation. Not affiliated with the Inkdown project.
+
 Copyright (c) 2026 MarkCraft contributors.

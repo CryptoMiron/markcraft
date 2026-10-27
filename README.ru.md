@@ -267,4 +267,6 @@ LANGUAGE=ru ./target/release/markcraft README.md
 
 MIT. См. [`LICENSE`](LICENSE).
 
+Числа вёрстки сняты с Inkdown (AGPL-3.0), но код оттуда не копировался: MarkCraft — самостоятельная реализация на CodeMirror 6. С проектом Inkdown связи нет.
+
 Copyright (c) 2026 MarkCraft contributors.

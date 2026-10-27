@@ -3,7 +3,7 @@
 pkgname=markcraft
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='Markdown editor for Omarchy: byte-exact files, Inkdown typography'
+pkgdesc='Markdown editor for Omarchy: byte-exact files, Inkdown-like typography'
 arch=('x86_64' 'aarch64')
 url='https://github.com/CryptoMiron/markcraft'
 license=('MIT')

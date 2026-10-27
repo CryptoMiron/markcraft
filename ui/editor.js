@@ -911,3 +911,11 @@ window.mc = {
 }
 
 view.focus()
+
+// Одно активное выделение на приложение: при потере фокуса окна снимаем
+// выделение, чтобы старое не мешало выделять в другом окне.
+window.addEventListener('blur', () => {
+  const main = view.state.selection.main
+  if (main.empty) return
+  view.dispatch({ selection: { anchor: main.head } })
+})

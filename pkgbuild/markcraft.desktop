@@ -2,7 +2,9 @@
 Type=Application
 Name=MarkCraft
 GenericName=Markdown Editor
+GenericName[ru]=Редактор Markdown
 Comment=Markdown editor with Omarchy theme and live preview
+Comment[ru]=Редактор Markdown с темой Omarchy и живым предпросмотром
 Exec=markcraft %f
 Icon=markcraft
 Terminal=false

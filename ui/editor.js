@@ -96,6 +96,9 @@ import { nextLinePrefix, toggleWrap, insertLink, existingLink } from './editing.
 const send = (type, extra = {}) =>
   window.webkit.messageHandlers.ipc.postMessage(JSON.stringify({ type, ...extra }))
 
+// Словарь вставлен Rust до бандла: к созданию EditorView он уже на месте.
+const t = (key) => window.mcI18n?.[key] ?? key
+
 // ─── Скрытие разметки ───────────────────────────────────────────────────────
 // Правило живое-превью: маркер виден только там, где стоит курсор. Всё
 // остальное отрисовано. Это дешёвая замена блочному WYSIWYG.
@@ -189,8 +192,8 @@ class CopyWidget extends WidgetType {
     const button = document.createElement('button')
     button.className = 'mc-copy'
     button.type = 'button'
-    button.title = 'Копировать код'
-    button.setAttribute('aria-label', 'Копировать код')
+    button.title = t('editor.copy_code')
+    button.setAttribute('aria-label', t('editor.copy_code'))
     button.contentEditable = 'false'
     // Без этого клик по кнопке уводит фокус из редактора.
     button.onmousedown = (event) => event.preventDefault()
@@ -650,19 +653,19 @@ const copyAsHtml = (view) => {
   return true
 }
 
-// Панель поиска по-русски: свои строки вместо английских по умолчанию.
+// Панель поиска: свои строки из словаря вместо английских по умолчанию.
 const phrases = EditorState.phrases.of({
-  Find: 'Найти',
-  Replace: 'Заменить',
-  next: 'дальше',
-  previous: 'назад',
-  all: 'все',
-  'match case': 'с учётом регистра',
-  regexp: 'рег. выражение',
-  'by word': 'слово целиком',
-  replace: 'заменить',
-  'replace all': 'заменить все',
-  close: 'закрыть',
+  Find: t('search.find'),
+  Replace: t('search.replace'),
+  next: t('search.next'),
+  previous: t('search.previous'),
+  all: t('search.all'),
+  'match case': t('search.match_case'),
+  regexp: t('search.regexp'),
+  'by word': t('search.by_word'),
+  replace: t('search.replace_one'),
+  'replace all': t('search.replace_all'),
+  close: t('search.close'),
 })
 
 const serviceKeys = [
@@ -790,7 +793,7 @@ const makeLink = (view) => {
     return true
   }
 
-  const edit = insertLink(text, range.from, range.to)
+  const edit = insertLink(text, range.from, range.to, t('editor.link_label'))
   view.dispatch({
     changes: { from: edit.from, to: edit.to, insert: edit.insert },
     selection: { anchor: edit.anchor, head: edit.head },
@@ -821,7 +824,7 @@ const view = new EditorView({
       codeHighlight,
       composingField,
       livePreview,
-      placeholder('Начните писать…'),
+      placeholder(t('editor.placeholder')),
       phrases,
       search({ top: true }),
       keymap.of([

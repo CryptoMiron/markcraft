@@ -3,6 +3,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use crate::i18n::t;
+
 /// Перевод строки, которым файл был записан. Документ в памяти всегда LF.
 #[derive(Clone, Copy, PartialEq)]
 enum Eol {
@@ -63,7 +65,7 @@ impl Doc {
         let body = if bom { &bytes[3..] } else { &bytes[..] };
         // Не UTF-8 — честная ошибка: молча перекодировать чужой файл нельзя.
         let raw = String::from_utf8(body.to_vec())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "файл не в кодировке UTF-8"))?;
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, t("error.utf8")))?;
 
         let crlf = raw.matches("\r\n").count();
         let lf = raw.matches('\n').count() - crlf;
@@ -104,7 +106,7 @@ impl Doc {
             .as_deref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "Без имени".to_owned())
+            .unwrap_or_else(|| t("file.untitled").to_owned())
     }
 
     /// Байты ровно в том виде, в каком файл лежал на диске.
@@ -126,13 +128,13 @@ impl Doc {
         let path = self
             .path
             .as_deref()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "у документа нет пути"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, t("error.no_path")))?;
 
         // Права уважаются: rename обошёл бы read-only, но это был бы чужой файл.
         if fs::metadata(path).is_ok_and(|m| m.permissions().readonly()) {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "файл доступен только для чтения",
+                t("error.read_only"),
             ));
         }
 

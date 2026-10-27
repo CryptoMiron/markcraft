@@ -1,4 +1,5 @@
 mod doc;
+mod i18n;
 mod theme;
 
 use std::cell::{Cell, RefCell};
@@ -15,9 +16,16 @@ use javascriptcore::ValueExt;
 use webkit2gtk::{LoadEvent, UserContentManager, UserContentManagerExt, WebView, WebViewExt};
 
 use doc::{Disk, Doc, draft, geometry};
+use i18n::{t, tf};
 use theme::Theme;
 
 const UI_HTML: &str = include_str!("../ui/built.html");
+
+/// Страница со словарём выбранного языка. Подстановка идёт до бандла:
+/// EditorView создаётся уже с переведёнными placeholder и phrases.
+fn page_html() -> String {
+    UI_HTML.replace("/*__I18N__*/", &i18n::js())
+}
 const AUTOSAVE: Duration = Duration::from_millis(1200);
 const DRAFT_EVERY: Duration = Duration::from_millis(300);
 /// Как часто проверяем, не изменил ли файл кто-то снаружи. Дешевле inotify
@@ -189,7 +197,7 @@ impl App {
     fn write(&self, show_error: bool) -> bool {
         let has_path = self.doc.borrow().path().is_some();
         if !has_path {
-            let Some(path) = choose(&self.window, FileChooserAction::Save, "Сохранить как")
+            let Some(path) = choose(&self.window, FileChooserAction::Save, t("file.save_as"))
             else {
                 return false;
             };
@@ -203,9 +211,7 @@ impl App {
             if show_error {
                 error(
                     &self.window,
-                    &format!(
-                        "Не удалось сохранить: {e}. Ctrl+Shift+S — сохранить под другим именем."
-                    ),
+                    &tf("error.save", &[("error", &e.to_string())]),
                 );
             }
             return false;
@@ -219,8 +225,7 @@ impl App {
     }
 
     fn save_as(&self) {
-        let Some(path) = choose(&self.window, FileChooserAction::Save, "Сохранить как")
-        else {
+        let Some(path) = choose(&self.window, FileChooserAction::Save, t("file.save_as")) else {
             return;
         };
         self.doc.borrow_mut().set_path(with_md(path));
@@ -261,7 +266,7 @@ impl App {
             .borrow()
             .path()
             .and_then(|p| p.parent().map(|d| format!("file://{}/", d.display())));
-        self.webview.load_html(UI_HTML, base.as_deref());
+        self.webview.load_html(&page_html(), base.as_deref());
     }
 
     /// Ctrl+= / Ctrl+- / Ctrl+0: 10% за шаг, 0 — сброс к масштабу рабочего стола.
@@ -286,7 +291,7 @@ impl App {
         if !self.maybe_save() {
             return;
         }
-        if let Some(path) = choose(&self.window, FileChooserAction::Open, "Открыть") {
+        if let Some(path) = choose(&self.window, FileChooserAction::Open, t("file.open")) {
             self.load(&path);
         }
     }
@@ -340,16 +345,16 @@ impl App {
         let reload = if gone {
             ask_dialog(
                 &self.window,
-                "Файл удалён с диска.\n\nСохранить заново — записать документ по прежнему пути.",
-                "_Сохранить заново",
-                "_Оставить как есть",
+                t("external.gone"),
+                t("common.save_again"),
+                t("common.keep_as_is"),
             )
         } else {
             ask_dialog(
                 &self.window,
-                "Файл изменён на диске.\n\nПеречитать — несохранённые правки будут потеряны.\nОставить моё — записать правки поверх чужой версии.",
-                "_Перечитать",
-                "_Оставить моё",
+                t("external.changed"),
+                t("common.reread"),
+                t("common.keep_mine"),
             )
         };
         self.conflict.set(false);
@@ -430,11 +435,11 @@ fn ask_save_changes(parent: &ApplicationWindow) -> ResponseType {
         DialogFlags::MODAL,
         MessageType::Question,
         ButtonsType::None,
-        "В документе есть несохранённые изменения.",
+        t("unsaved.message"),
     );
-    dialog.add_button("_Отмена", ResponseType::Cancel);
-    dialog.add_button("_Не сохранять", ResponseType::No);
-    dialog.add_button("_Сохранить", ResponseType::Yes);
+    dialog.add_button(t("common.cancel"), ResponseType::Cancel);
+    dialog.add_button(t("common.dont_save"), ResponseType::No);
+    dialog.add_button(t("common.save"), ResponseType::Yes);
     dialog.set_default_response(ResponseType::Yes);
     let response = dialog.run();
     dialog.close();
@@ -462,41 +467,16 @@ fn ask_dialog(parent: &ApplicationWindow, text: &str, accept: &str, reject: &str
 fn help(parent: &ApplicationWindow) {
     // Текст простой, без разметки: set_secondary_markup в этом наборе
     // фич gtk-rs недоступен, а ради заголовков заводить свой Dialog — лишний код.
-    const KEYS: &str = "\
-Файлы
-Ctrl+O — открыть
-Ctrl+S — сохранить
-Ctrl+Shift+S — сохранить как
-Ctrl+N — новое окно
-
-Правка
-Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — отменить и вернуть
-Ctrl+B — жирный
-Ctrl+I — курсив
-Ctrl+Shift+X — зачёркнутый
-Ctrl+K — ссылка
-Ctrl+клик по ссылке — открыть в браузере
-
-Поиск
-Ctrl+F — поиск
-Ctrl+H — поиск и замена
-Enter / Ctrl+G — дальше, Shift+Enter — назад, Esc — закрыть
-
-Вид
-Ctrl+= / Ctrl+- / Ctrl+0 — размер текста
-Ctrl+колесо — то же
-Ctrl+Shift+C — копировать как HTML
-
-Полный экран — хоткей Omarchy, не приложения.";
+    let keys = t("help.body");
     let dialog = MessageDialog::new(
         Some(parent),
         DialogFlags::MODAL,
         MessageType::Info,
         ButtonsType::None,
-        KEYS,
+        keys,
     );
-    dialog.set_title("Клавиши MarkCraft");
-    dialog.add_button("_Закрыть", ResponseType::Close);
+    dialog.set_title(t("help.title"));
+    dialog.add_button(t("common.close"), ResponseType::Close);
     dialog.set_default_response(ResponseType::Close);
     dialog.run();
     dialog.close();
@@ -533,7 +513,7 @@ fn error(parent: &ApplicationWindow, text: &str) {
         ButtonsType::None,
         text,
     );
-    dialog.add_button("_Закрыть", ResponseType::Close);
+    dialog.add_button(t("common.close"), ResponseType::Close);
     dialog.set_default_response(ResponseType::Close);
     dialog.run();
     dialog.close();
@@ -696,7 +676,7 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
     });
 
     window.add(&webview);
-    webview.load_html(UI_HTML, base.as_deref());
+    webview.load_html(&page_html(), base.as_deref());
     window.show_all();
     // Новое окно должно не только появиться, но и получить фокус: иначе
     // первый клик по нему уходит на активацию окна, а не в редактор, и

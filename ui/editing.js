@@ -112,8 +112,8 @@ export function existingLink(text, pos) {
 }
 
 /// Ссылка для Ctrl+K: выделенный текст становится подписью, курсор — на адресе.
-export function insertLink(text, from, to) {
-  const label = text.slice(from, to) || 'текст'
+export function insertLink(text, from, to, emptyLabel = 'текст') {
+  const label = text.slice(from, to) || emptyLabel
   const insert = `[${label}](https://)`
   const urlStart = from + label.length + 3
   return { from, to, insert, anchor: urlStart, head: urlStart + 'https://'.length }

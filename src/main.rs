@@ -70,6 +70,7 @@ impl App {
     /// Отдаёт странице палитру и размер текста. Вызывается и при смене темы.
     fn apply_theme(&self) {
         let theme = self.theme.borrow();
+        theme::apply_gtk(&theme);
         if std::env::var_os("MC_DEBUG").is_some() {
             eprintln!("css: {}", theme.css());
         }
@@ -573,6 +574,8 @@ fn build_window(app: &Application, initial: Option<PathBuf>, open_files: &OpenFi
         app: app.clone(),
         open_files: open_files.clone(),
     });
+
+    theme::apply_gtk(&state.theme.borrow());
 
     let sender = state.clone();
     manager.connect_script_message_received(Some("ipc"), move |_, result| {

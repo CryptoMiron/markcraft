@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
 
@@ -256,6 +257,30 @@ impl Theme {
         self.visible(&self.selection)
     }
 
+    /// CSS для нативных GTK3-диалогов: у них своя палитра Adwaita, а не
+    /// Omarchy, поэтому даже шрифт и фон выглядят чужими.
+    fn gtk_css(&self) -> String {
+        let border = blend(&self.background, &self.foreground, 0.22);
+        let surface = blend(&self.background, &self.foreground, 0.08);
+        let hover = blend(&self.background, &self.foreground, 0.14);
+        let active = blend(&self.background, &self.foreground, 0.20);
+        let (bg, fg, accent) = (&self.background, &self.foreground, &self.accent);
+        format!(
+            "messagedialog, messagedialog.background {{ background-color: {bg}; color: {fg}; }}\
+messagedialog label {{ color: {fg}; }}\
+messagedialog headerbar, messagedialog .titlebar {{\
+ background-color: {bg}; color: {fg}; border-bottom: 1px solid {border}; box-shadow: none; }}\
+messagedialog decoration {{ border-color: {border}; }}\
+messagedialog button {{\
+ background-image: none; background-color: {surface}; color: {fg}; border: 1px solid {border};\
+ border-radius: 6px; box-shadow: none; text-shadow: none; padding: 4px 12px; }}\
+messagedialog button:hover {{ background-color: {hover}; }}\
+messagedialog button:active, messagedialog button:checked {{ background-color: {active}; }}\
+messagedialog button:focus {{ border-color: {accent}; outline: none; }}\
+messagedialog .dialog-action-area {{ background-color: {bg}; border-top: 1px solid {border}; }}"
+        )
+    }
+
     /// CSS-переменные для страницы. Одна строка — один слой правды о цвете.
     pub fn css(&self) -> String {
         let border = blend(&self.background, &self.foreground, 0.2);
@@ -293,6 +318,32 @@ impl Theme {
     pub fn column(&self) -> f64 {
         self.scaled(700.0)
     }
+}
+
+thread_local! {
+    static GTK_PROVIDER: RefCell<Option<gtk::CssProvider>> = const { RefCell::new(None) };
+}
+
+/// Перекрашивает нативные диалоги GTK под палитру Omarchy: без этого они
+/// остаются в Adwaita и выглядят чужим окном. Провайдер один на процесс,
+/// при смене темы ему загружается новый CSS.
+pub fn apply_gtk(theme: &Theme) {
+    let css = theme.gtk_css();
+    GTK_PROVIDER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let provider = slot.get_or_insert_with(|| {
+            let provider = gtk::CssProvider::new();
+            if let Some(screen) = gtk::gdk::Screen::default() {
+                gtk::StyleContext::add_provider_for_screen(
+                    &screen,
+                    &provider,
+                    gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                );
+            }
+            provider
+        });
+        let _ = provider.load_from_data(css.as_bytes());
+    });
 }
 
 fn zoom_file() -> Option<PathBuf> {
@@ -440,6 +491,17 @@ bright_foreground = "#c0caf5"
         assert!(css.contains("--mc-selection-fg:#c0caf5"), "{css}");
         // Поиск остаётся на подмешанном цвете, а не на сыром выделении темы.
         assert!(css.contains("--mc-search:#"), "{css}");
+    }
+
+    #[test]
+    fn gtk_dialog_css_follows_theme() {
+        let mut theme = Theme::default();
+        theme.apply_colors(TOKYO);
+        let css = theme.gtk_css();
+        assert!(css.contains("messagedialog"), "{css}");
+        assert!(css.contains(&theme.background), "{css}");
+        assert!(css.contains(&theme.foreground), "{css}");
+        assert!(css.contains(&theme.accent), "{css}");
     }
 
     #[test]

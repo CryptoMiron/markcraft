@@ -361,12 +361,22 @@ body {
   font-style: normal;
 }
 
-/* Выделение и курсор — нативные: WebKit красит их из `::selection` и
-   `caret-color`, а `drawSelection()` рисовал бы поверх своё.
-   Цвета — как в Omawrite: фон и текст из темы, без инверсии.
-   Только `background-color`: сокращённый `background` WebKit в `::selection`
-   молча игнорирует и красит выделение системным цветом. */
+/* WebKitGTK прогоняет фон нативного ::selection через чужой цветовой профиль:
+   #292e42 превращается почти в чёрный. Поэтому фон рисует метка .mc-selected
+   (обычный CSS, тот же цвет, что у Omawrite), а ::selection отвечает только
+   за цвет текста. */
 ::selection {
+  color: var(--mc-selection-fg);
+  background-color: transparent;
+}
+
+.cm-line .mc-selected {
+  background-color: var(--mc-selection);
+}
+
+/* В полях поиска редактор не рисует метку, поэтому там выделение остаётся
+   нативным. */
+.cm-editor .cm-panels input::selection {
   background-color: var(--mc-selection);
   color: var(--mc-selection-fg);
 }

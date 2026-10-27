@@ -341,6 +341,18 @@ function buildDecorations({ state }) {
   const composing = state.field(composingField, false)
   const ranges = []
 
+  // Фон выделения рисуем сами: WebKitGTK прогоняет нативный ::selection
+  // через чужой цветовой профиль, и тёмный цвет темы становится почти
+  // чёрным. Метка ложится поверх фона строки, но под текст.
+  for (const range of state.selection.ranges) {
+    if (range.empty) continue
+    ranges.push({
+      from: range.from,
+      to: range.to,
+      deco: Decoration.mark({ class: 'mc-selected' }),
+    })
+  }
+
   const add = (from, to, deco) => {
     if (to > from) ranges.push({ from, to, deco })
   }

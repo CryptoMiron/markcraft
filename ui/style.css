@@ -13,7 +13,6 @@
   --mc-inline-fg: #0f766e;
   --mc-accent: #0f766e;
   --mc-selection: rgba(128, 128, 128, 0.3);
-  --mc-selection-fg: var(--mc-fg);
   --mc-search: rgba(128, 128, 128, 0.3);
   --mc-table-head: rgba(128, 128, 128, 0.12);
 }
@@ -31,7 +30,6 @@
     --mc-inline-fg: #fb923c;
     --mc-accent: #7dd3fc;
     --mc-selection: rgba(128, 128, 128, 0.3);
-    --mc-selection-fg: var(--mc-fg);
     --mc-search: rgba(128, 128, 128, 0.3);
     --mc-table-head: rgba(128, 128, 128, 0.12);
   }
@@ -362,10 +360,10 @@ body {
 }
 
 /* Выделение и курсор — нативные: WebKit красит их из `::selection` и
-   `caret-color`, а `drawSelection()` рисовал бы поверх своё. */
+   `caret-color`, а `drawSelection()` рисовал бы поверх своё.
+   Цвет текста не задаём: выделение меняет только фон, как в Omawrite. */
 ::selection {
   background: var(--mc-selection);
-  color: var(--mc-selection-fg);
 }
 
 /* ─── Панель поиска ─────────────────────────────────────────────────────── */

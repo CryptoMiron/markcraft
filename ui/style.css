@@ -363,9 +363,11 @@ body {
 
 /* Выделение и курсор — нативные: WebKit красит их из `::selection` и
    `caret-color`, а `drawSelection()` рисовал бы поверх своё.
-   Цвета — как в Omawrite: фон и текст из темы, без инверсии. */
+   Цвета — как в Omawrite: фон и текст из темы, без инверсии.
+   Только `background-color`: сокращённый `background` WebKit в `::selection`
+   молча игнорирует и красит выделение системным цветом. */
 ::selection {
-  background: var(--mc-selection);
+  background-color: var(--mc-selection);
   color: var(--mc-selection-fg);
 }
 
